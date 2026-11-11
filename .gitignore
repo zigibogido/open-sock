@@ -1,0 +1,7 @@
+work/
+*.apk
+*.xapk
+*.pcap
+*.pcapng
+*.btsnoop
+*.log
