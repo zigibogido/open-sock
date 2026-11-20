@@ -353,3 +353,23 @@ Both request and response bodies are encrypted **on top of TLS** — not plain J
 
 ### Immediate next step if continuing this track
 Hook the app's own encrypt/decrypt function call via Frida (now that we have a working rooted-device toolchain from earlier in this project) to capture plaintext request/response bodies directly, rather than trying to reverse the algorithm from ciphertext alone.
+
+## Cloud API crypto: hit a genuine wall, two findings worth recording (2026-11-20)
+
+### Frida/ptrace is actively blocked for this app — confirmed, not a timing issue
+Every `start_frida_session` attach attempt in this session failed with "Process not found", even when the target pid was independently confirmed alive via `adb shell ps` at the exact same moment. Checked `list_frida_processes`' own enumeration directly afterward: **the app's pid is simply absent from frida-server's own process list**, while every other running app (including unrelated ones like Brave, Play Store, GMS) appears normally. This rules out timing/race entirely — it's the app itself (almost certainly the same `ijm`/ijiami packer anti-tamper layer found at the very start of this project) actively hardening against ptrace-based introspection (e.g. `prctl(PR_SET_DUMPABLE, 0)` or an installed seccomp filter blocking `PTRACE_ATTACH`), not just detecting-and-exiting after the fact like the earlier `/proc/net/unix` check. **Standard Frida attach/spawn will not work against this target on this device**, regardless of setup correctness.
+
+### Found where the ECC key material lives on disk — but it's wrapped in another layer
+With root, `shared_preference_security.xml` (in the app's private data dir) contains:
+- `ecdh-key<account email>` — a large (~290+ byte) hex blob, clearly too big to be a raw EC private key (32-66 bytes for common curves) — this is wrapped/encrypted at rest, not plaintext.
+- `account_data_key` — similarly large, likely wrapped session/account data.
+
+This confirms the on-disk storage has its **own encryption layer** protecting the ECC key material, on top of (1) the local PPCS AES-ECB scheme (cracked), (2) the cloud API's ECDH+AES-CBC+HMAC scheme (`libecc-encryption.so`, not yet cracked), making this now a **third, nested crypto layer** to get through before the cloud API's "algorithm_first" scheme could be replicated from a static key, even if we could read this file.
+
+### Where this leaves the cloud-API crack
+Realistic remaining options, roughly in order of effort:
+1. **Build a native harness** that `dlopen()`s `libecc-encryption.so` directly and calls its plain-C exports (`GetPrivateKey`, `uECC_shared_secret`, `kdf_func`, `AES_CBC_decrypt_buffer_ctx`) outside the Android app sandbox entirely — sidesteps Frida/ptrace blocking since nothing is injected into the running app. Complication: the small size of `GetPrivateKey` (12 bytes) suggests it's a trivial getter, not the real on-disk decryption logic; the actual key-unwrapping likely lives in the JNI wrapper (`Java_..._getPrivateKey`, which needs a real `JNIEnv*`) or in Java code not in this `.so` at all — would need a faked/minimal `JNIEnv` to call it standalone, a known but fiddly technique.
+2. **Repackage the APK with a Frida gadget** instead of attaching to the live process — avoids the ptrace-based attach path entirely, but risks tripping the packer's own integrity/signature checks differently (untested whether it would survive).
+3. If the on-disk wrapping turns out to be **Android Keystore / TEE-backed** (common for "ecdh-key" style storage via `AndroidKeyStore`), extracting it is not realistically possible even with root — hardware keystores are specifically designed to resist this. Not yet confirmed either way.
+
+This is a materially harder problem than everything cracked so far in this project (which all yielded to either a leaked static key or straightforward packet analysis). Recommend treating it as its own dedicated investigation rather than squeezing further into this session.
