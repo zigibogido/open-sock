@@ -4,8 +4,9 @@ Reverse-engineering the eufy Baby Smart Sock (T8340) and its base (T8351) so the
 device can be used without the official app — read telemetry, understand
 settings, and (in progress) send commands directly.
 
-**Status: full read access and app-independent operation are working.
-Writing commands from our own client is still in progress.**
+**Status: full app-independent read access is working end-to-end** — a
+standalone client reads live sock telemetry with the official app completely
+closed. Writing commands from our own client is the next step.
 
 ## TL;DR
 
@@ -38,14 +39,10 @@ Writing commands from our own client is still in progress.**
 
 ## What's still in progress
 
-- One of the two parallel P2P sub-channels ("channel 2") carries larger,
-  multi-fragment messages that aren't reassembling cleanly yet in the
-  standalone client. The protocol and key are confirmed correct (the same
-  channel decodes fine when captured from the real app); it's a reassembly
-  bug in our own client, not an unknown.
 - Sending our *own* crafted commands to the base (not just reading) — the
   protocol for this is understood (see `docs/findings.md`), but hasn't been
-  exercised end-to-end from the standalone client yet.
+  exercised end-to-end from the standalone client yet. This is the main
+  remaining piece for full command parity with the official app.
 
 ## Repo layout
 
