@@ -297,3 +297,11 @@ Root cause of the channel-2 puzzle, finally nailed:
 
 ## Next: cmd 3519 (HR/SpO2 thresholds) — needs its own subtype extraction
 Before testing, must repeat the same extraction process against a real captured `cmd 3519` packet to get its correct 12-byte subtype (don't reuse 3515/3516's). This is safety-alerting config (heart-rate/SpO2 warning/danger limits) — test with a value that doesn't disable alerting (e.g. tweak one threshold slightly, not set `*_advance_enable` to 0), verify via readback (`param_type 3519`'s packed string), then consider reverting.
+
+## WRITE #3 confirmed: cmd 3519 (HR/SpO2 alert thresholds), tested and reverted safely (2026-11-20)
+- Extracted the correct subtype for `cmd 3519` from a real capture: `46057001000001002c010000` (added to `COMMAND_SUBTYPES`).
+- Read current live values first (`param_type 3519` packed string: `230-230-100-80,90-80,1-1`) before touching anything, so an exact revert was possible.
+- Sent a minimal, non-disabling tweak (`hr_warning_up`/`hr_warning_up_real`: 230→231 only; left `hr_advance_enable`/`oxy_advance_enable` at `1`, didn't touch dangerous thresholds) — confirmed via readback: `231-231-100-80,90-80,1-1`.
+- **Immediately reverted** to the original values; confirmed via readback back to `230-230-100-80,90-80,1-1`.
+- This is the third command type confirmed write-capable (3515 brightness, 3516 move_threshold, 3519 HR/SpO2 thresholds), using the exact same `build_command_packet()` approach each time — just needs the per-command subtype extracted fresh from a real capture before each new command type.
+- **Full read+write parity achieved for all three currently-known settings commands.** Next for broader app parity: capture more app screens (sleep schedule, notification toggles, factory reset, firmware update trigger, etc.) to discover additional `cmd` numbers not yet seen.
