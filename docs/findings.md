@@ -373,3 +373,32 @@ Realistic remaining options, roughly in order of effort:
 3. If the on-disk wrapping turns out to be **Android Keystore / TEE-backed** (common for "ecdh-key" style storage via `AndroidKeyStore`), extracting it is not realistically possible even with root — hardware keystores are specifically designed to resist this. Not yet confirmed either way.
 
 This is a materially harder problem than everything cracked so far in this project (which all yielded to either a leaked static key or straightforward packet analysis). Recommend treating it as its own dedicated investigation rather than squeezing further into this session.
+
+## Cloud API crypto FULLY reverse-engineered via Ghidra — only the private key value remains (2026-11-20)
+Installed Ghidra 12.2 + rz-ghidra (`sudo pacman -S ghidra rz-ghidra`) and configured `GHIDRA_INSTALL_DIR=/opt/ghidra` in the `rea` MCP server's launch env (added to `~/.claude.json`'s `mcpServers.rea.env`, reconnect via `/mcp` to pick it up). This unlocked full pseudocode decompilation — raw Rizin disassembly alone wasn't tractable for this scheme.
+
+### `eccDecrypt(JNIEnv, thiz, String data, String key, int dataLen)`
+Converts `data` and `key` Java strings to C strings (their actual byte content — likely passed via a Latin-1/byte-preserving String encoding, not hex/base64 text, since the underlying crypto consumes them as raw binary, not ASCII), then calls native `DecryptECC(data, dataLen, outBuf, outLenPtr, key)`.
+
+### `DecryptECC` — complete ECIES scheme, fully decompiled
+Envelope format (total length = `dataLen` bytes, minimum 0x52=82):
+- `[0x00:0x21]` (33 bytes): sender's **ephemeral EC public key**, SEC1 compressed format (1-byte prefix + 32-byte X)
+- `[0x21:0x31]` (16 bytes): **AES IV**
+- `[0x31 : 0x31+ciphertext_len]` (`ciphertext_len = dataLen - 0x51`): **AES-128-CBC ciphertext**
+- last 32 bytes of envelope: **HMAC-SHA256 tag**, computed over `[0x21 : 0x21+16+ciphertext_len]` (IV‖ciphertext)
+
+Key derivation:
+1. `shared_secret[32] = ECDH(ephemeral_pubkey, OUR_private_key)` — this is the `key` argument passed in from Java (confirmed via `derive_S_from_PRI`'s decompiled logic: the private-key argument is treated as **raw 32 bytes**, not a hex/base64 string — so whatever Java passes as the `key` jstring must carry raw binary, likely via a byte-preserving String charset).
+2. `kdf_out[48] = KDF(shared_secret, 32 bytes)` (`kdf_func`)
+3. `AES_key = kdf_out[0:16]`, `HMAC_key = kdf_out[16:48]` (32 bytes)
+4. Verify `HMAC-SHA256(HMAC_key, IV‖ciphertext) == received_tag`; if valid, `AES-128-CBC-Decrypt(AES_key, IV, ciphertext)`, strip PKCS7 padding → plaintext.
+
+This is a genuinely solid ECIES design (unlike the local protocol's static AES-ECB key) — no shortcut exists in the scheme itself. **The only missing piece is the actual value of "our ECC private key"** (32 raw bytes) that the Java layer passes in as the `key` argument.
+
+### Where the private key lives, and the real remaining blocker
+- `GetPrivateKey()` (native) just returns a pointer to a static buffer, written only by `GenerateKeyForECC` (`uECC_make_key`) — so the native side doesn't independently load/decrypt anything from disk. The **Java layer** is responsible for retrieving the real key and passing it into `eccDecrypt` each call.
+- The actual key material is almost certainly the `ecdh-key<account email>` entry in `shared_preference_security.xml` (found earlier) — a ~290-byte wrapped blob, far too large to be a raw 32-byte key, so it's encrypted at rest.
+- **This is now the single blocking unknown**: how that SharedPreferences blob is unwrapped into the raw 32-byte private key. Two possibilities, not yet distinguished:
+  1. A software scheme (same homemade-crypto house style as everywhere else in this app) — crackable statically if we can find the unwrap routine (likely in Java/Kotlin code in the still-packed DEX, not in this `.so` — would need the DEX unpacked, or the Frida-blocked dynamic route).
+  2. Android Keystore / hardware-backed wrapping — if so, not extractable even with root, since TEE-backed keys are specifically designed to resist this.
+- Next concrete step if continuing: check whether the blob's structure matches a known Android Keystore wrapped-key format (e.g. ASN.1/protobuf framing Keystore typically uses), which would settle (2) vs (1) without more guessing.
