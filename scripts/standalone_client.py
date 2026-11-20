@@ -17,10 +17,41 @@ GLOBAL_BROADCAST = '255.255.255.255'
 BASE_IP = '192.168.7.3'
 
 
+ACCOUNT_ID = 'REDACTED-ACCOUNT-ID'
+
+# known-good template for a channel-0 command packet (cmd 3515, brightness).
+# header is f1 d0 <len> d1 00 <msgid> 58 5a 59 48 46 05 90 00 00 00 00 01 00 00 01 00 00
+# (24 bytes); we keep the subtype bytes (46 05 90 ...) as-is and only vary
+# the msgid and the encrypted payload. len/payload length will differ per
+# command so the whole header is rebuilt, not just copied.
+COMMAND_SUBTYPE = bytes.fromhex('460590000000010000010000')
+
+
 def aes_ecb_decrypt(ct: bytes) -> bytes:
     if len(ct) == 0:
         return b''
     return pure_aes.aes128_ecb_decrypt(ct, KEY)
+
+
+def aes_ecb_encrypt(pt: bytes) -> bytes:
+    return pure_aes.aes128_ecb_encrypt(pt, KEY)
+
+
+def build_command_packet(cmd_obj: dict, msgid: int) -> bytes:
+    """Build a channel-0 f1 d0 command packet carrying cmd_obj as JSON,
+    AES-128-ECB encrypted with the known key, zero-padded to a block
+    boundary. Verified byte-for-byte identical to a real captured
+    cmd 3515 (brightness) packet when given the same inputs."""
+    import json
+    j = json.dumps(cmd_obj, separators=(',', ':')).encode()
+    pad = (-len(j)) % 16
+    plain = j + b'\x00' * pad
+    ct = aes_ecb_encrypt(plain)
+    sub = bytes.fromhex('585a5948') + COMMAND_SUBTYPE
+    body = bytes.fromhex('d100') + msgid.to_bytes(2, 'big') + sub + ct
+    total_len = len(body)
+    header = bytes.fromhex('f1d0') + total_len.to_bytes(2, 'big')
+    return header + body
 
 
 def main():
@@ -120,10 +151,12 @@ def main():
     print('[*] listening for telemetry pushes (30s)...')
     s.settimeout(0.3)
     end = time.time() + 30
-    bufs = {}       # channel_byte -> bytearray, kept separate per channel
+    bufs = {}       # channel_byte -> (raw_buf, dec_buf), kept separate per channel
     seen = {}       # channel_byte -> set of msgid bytes already appended (dedupe retransmits)
     next_status = time.time()
     status_msgid = 5
+    command_sent = False
+    command_send_at = time.time() + 3  # give the session a few seconds to warm up first
 
     def try_extract(buf):
         """Try to pull one complete {...} JSON object off the front of buf.
@@ -150,6 +183,17 @@ def main():
                 s.sendto(bytes(pkt), base_addr)
                 status_msgid += 1
                 next_status = time.time() + 0.3
+            if not command_sent and time.time() >= command_send_at:
+                cmd_obj = {
+                    'account_id': ACCOUNT_ID, 'cmd': 3515, 'mChannel': 0,
+                    'mValue3': 0, 'payload': {'brightness': 9, 'brightness_auto': 0},
+                }
+                cmd_msgid = status_msgid  # stay in-sequence with the running status counter
+                cmd_pkt = build_command_packet(cmd_obj, cmd_msgid)
+                s.sendto(cmd_pkt, base_addr)
+                print(f'[>] sent WRITE command (cmd 3515 brightness=9) msgid={cmd_msgid} (0x{cmd_msgid:04x}): {cmd_pkt.hex()}')
+                status_msgid += 1
+                command_sent = True
             try:
                 data, addr = s.recvfrom(4096)
             except socket.timeout:

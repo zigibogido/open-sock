@@ -4,9 +4,9 @@ Reverse-engineering the eufy Baby Smart Sock (T8340) and its base (T8351) so the
 device can be used without the official app — read telemetry, understand
 settings, and (in progress) send commands directly.
 
-**Status: full app-independent read access is working end-to-end** — a
-standalone client reads live sock telemetry with the official app completely
-closed. Writing commands from our own client is the next step.
+**Status: full app-independent read AND write access is working end-to-end** —
+a standalone client reads live sock telemetry and successfully changes base
+settings, with the official app completely closed throughout.
 
 ## TL;DR
 
@@ -36,13 +36,18 @@ closed. Writing commands from our own client is the next step.
 - Decoding settings pushes: HR/SpO2 alert thresholds, movement sensitivity,
   base LED brightness
 - A full device-parameter dump (firmware versions, 77 config parameters)
+- **Writing** a setting back to the base and having it take effect — verified
+  by reading the changed value back afterward, not just by getting an ack
 
 ## What's still in progress
 
-- Sending our *own* crafted commands to the base (not just reading) — the
-  protocol for this is understood (see `docs/findings.md`), but hasn't been
-  exercised end-to-end from the standalone client yet. This is the main
-  remaining piece for full command parity with the official app.
+- Only one write command type (`cmd 3515`, base LED brightness) has been
+  exercised end-to-end so far. The same encoder generalizes directly to the
+  other known command types (movement threshold, HR/SpO2 alert thresholds) —
+  just needs doing.
+- Pairing a brand-new base from scratch, bypassing the official app/phone
+  setup flow entirely (or building a minimal web-based pairing flow) — not
+  yet investigated.
 
 ## Repo layout
 
