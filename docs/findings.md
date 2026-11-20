@@ -429,3 +429,28 @@ Built a proper native poller (`mapwatch.c`, compiled on-device via Termux's `cla
 - Dynamic extraction via Frida is blocked (confirmed: app's pid absent from frida-server's own process enumeration).
 - Dynamic extraction via plain `/proc/pid/mem` reads is **not blocked** (confirmed working), but the specific technique tried (polling `/proc/pid/maps` for a named or newly-appeared library mapping) does not catch the window.
 - This specific sub-problem (get the raw 32-byte private key) is a well-scoped, understood, but genuinely hard open problem requiring kernel-level tracing tooling not yet built. Recommend treating as its own future project rather than continuing to iterate on userspace polling approaches, which have now been reasonably exhausted.
+
+## gdbserver attaches successfully (ptrace itself is NOT blocked) — but app self-destructs on resume (2026-11-20)
+Tested whether the earlier "Frida/ptrace blocked" conclusion was really a ptrace-level block, or just Frida-specific fingerprinting. Installed Termux's `gdbserver` + `libthread-db` (downloaded directly as `.deb`s via `curl --resolve`, bypassing broken DNS resolution in Termux's bionic-linked curl — see Toolchain gotchas below) and attached to the live `com.oceanwing.care.cam` process:
+
+```
+gdbserver --attach :1234 <pid>
+# -> "Attached; pid = <pid>" / "Listening on port 1234"
+```
+
+**This succeeded** — confirms `ptrace(PTRACE_ATTACH)` itself is not blocked at the kernel/process level. This means the earlier Frida conclusion ("pid absent from frida-server's own enumeration") was almost certainly catching the *aftermath* of this same self-destruct mechanism (process already killed by the time Frida's enumeration or our checks ran), not a true attach-time block.
+
+Connected a real GDB session (`target remote`) and set a breakpoint on `mprotect` (a safe, always-resolvable libc target, chosen specifically because the plan was to catch any memory region being flipped executable — the suspected mechanism behind the native-library's anonymous, short-lived mapping). **On `continue`, the process was SIGKILLed within ~1-2 seconds** — before the breakpoint ever fired. This matches the earlier-documented root-detection self-destruct pattern (`/proc/self/status`'s `TracerPid` field is almost certainly the check), just firing much faster here, likely because resuming after being stopped at attach gives the check loop its next cycle immediately.
+
+**Net new understanding**: the anti-debug defense is a live polling check (probably on a timer/loop, checking `TracerPid != 0`), not an attach-time block. It applies uniformly regardless of which ptrace-based tool attaches (Frida or gdbserver) and kills the process within a few seconds of the tracer being present and the process actually running (not just stopped at a breakpoint).
+
+### What would be needed to go further
+To win this race, the detection check itself needs to be neutralized *before* it gets a chance to run after resume — options, in rough order of effort:
+1. **Patch the check in memory while still stopped** (possible in principle — we have full memory write access via the same gdb session — but requires first locating the exact comparison/branch instruction for the `TracerPid` check, which means getting a static disassembly of whichever code performs it; not yet attempted).
+2. **LD_PRELOAD a fake libc `fopen`/`read` that lies about `/proc/self/status`'s `TracerPid` line** — requires the hook to be in place *before* the app's own first read of that file, i.e. injected at process creation (zygote fork), not via a later attach. Needs a Zygisk module (Magisk) or equivalent process-creation-time injection, which hasn't been set up in this project.
+3. Hardware watchpoint on the specific read/compare instead of a software breakpoint, to pause with less disruption — still has the same fundamental race unless combined with (1).
+
+This is a well-scoped, understood blocker now, but a materially bigger next step (static analysis to find the exact check, then patch-before-resume or Zygisk injection) rather than another quick iteration. Recommend treating it as its own follow-up task.
+
+### Toolchain gotcha: Termux's `pkg`/`apt`/`curl` can't resolve hostnames even with working IP connectivity
+Termux's `curl` is bionic-linked and does not use `/etc/resolv.conf` (Android's own DNS stack normally handles this via `netd`, which wasn't working for this profile — raw IP connectivity, e.g. `ping 8.8.8.8`, worked fine, but hostname resolution failed everywhere in Termux). Fixed by resolving the hostname on the host machine (`getent hosts <host>`) and passing the IP straight to curl with `--resolve <host>:443:[<ip>]` (and `-6` for IPv6-only mirrors), then fetching the Termux repo's `Packages.gz` index directly to find the exact `.deb` path, downloading that `.deb` directly (bypassing `pkg`/`apt` entirely), and installing with `dpkg -i` under Termux's own `PATH`/`PREFIX` env vars.
