@@ -320,3 +320,9 @@ Voice Prompt toggles (4 booleans), App Notification toggles (4 booleans — thes
 
 ### Privacy note
 `cmd 3509` and `cmd 1201` carry personal information (a child's name, an account holder's display name) by design — this is normal app behavior, not a vulnerability. Pushed as-is, consistent with the earlier decision on serials/keys/account_id.
+
+## Settings sweep #2: most toggles don't touch the local PPCS channel at all (2026-11-20)
+- Targeted sweep (voice prompts x4, app notifications x4, audio volume, device name, time format, timezone — 12 actions, one at a time) produced **zero new local PPCS traffic** to the base. Only the pre-existing periodic `cmd 3516` heartbeat and one `cmd 1201` fired, both unrelated to the specific actions taken.
+- Confirmed via an unfiltered capture (no base-IP filter) during a device-name change: the actual traffic went over **HTTPS to `care-app.eufylife.com`** (3.148.10.195), the eufy cloud API — not to the base on the LAN.
+- **Conclusion: these settings (voice prompts, app notifications, device name, time format, timezone, and likely audio volume) are cloud-stored/cloud-pushed, not part of the local PPCS protocol.** Only settings that need to take effect on the *physical device* immediately and independent of connectivity (brightness, movement threshold, HR/SpO2 thresholds, working mode) go over the local channel; general metadata/preferences go through the cloud API instead.
+- **This caps what's achievable via the current reverse-engineering track.** Full parity with the remaining app settings would require a separate effort: reverse-engineering `care-app.eufylife.com`'s HTTPS API (auth, request/response formats) — a different protocol and almost certainly a different tooling approach (TLS interception / MITM proxy or Frida TLS hooking, not UDP packet capture). Not started; flagged as a distinct follow-on project if full app parity (including cloud-only settings) is wanted.
