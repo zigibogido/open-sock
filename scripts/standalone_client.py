@@ -163,34 +163,42 @@ def main():
             if len(data) >= 8:
                 ack = bytes.fromhex('f1d10006d1') + data[5:6] + bytes.fromhex('0001') + data[6:8]
                 s.sendto(ack, addr)
-            payload = data[24:]
-            if len(payload) == 0 or len(payload) % 16 != 0:
-                print(f'[<] d0 non-block-aligned from {addr}, len={len(payload)} (skipping, not AES content)')
-                continue
+            # the first fragment of a message has a 24-byte header starting
+            # with the "XZYH" tag at offset 8; continuation fragments have
+            # no tag and only an 8-byte header (f1 d0 <len> d1 <ch> <msgid>).
+            # The base also sometimes sends this content in plaintext (no
+            # AES at all) rather than encrypted -- seen on our own standalone
+            # sessions but not on the real app's -- so try both.
+            has_tag = data[8:12] == b'XZYH'
+            hdr_len = 24 if has_tag else 8
+            payload = data[hdr_len:]
             channel = data[5]
             msgid_key = bytes(data[6:8])
             channel_seen = seen.setdefault(channel, set())
             if msgid_key in channel_seen:
                 continue  # retransmit of something we already buffered -- skip, don't duplicate
             channel_seen.add(msgid_key)
-            pt = aes_ecb_decrypt(payload)
-            buf = bufs.setdefault(channel, bytearray())
-            buf += pt
-            if len(buf) > 8192:
-                print(f'[!] buffer overflow on channel {channel} without valid JSON, resetting')
-                bufs[channel] = bytearray()
-                continue
-            while True:
-                obj_bytes, rest = try_extract(buf)
-                if obj_bytes is None:
-                    break
-                buf[:] = rest
-                try:
-                    import json
-                    obj = json.loads(obj_bytes)
-                    print(f'[<] JSON from {addr} (channel {channel}): {json.dumps(obj)}')
-                except Exception:
-                    print(f'[<] channel {channel}: braces matched but not valid JSON ({len(obj_bytes)}B): {obj_bytes[:120]}')
+
+            raw_buf, dec_buf = bufs.setdefault(channel, (bytearray(), bytearray()))
+            raw_buf += payload
+            if len(payload) % 16 == 0 and len(payload) > 0:
+                dec_buf += aes_ecb_decrypt(payload)
+            for label, buf in (('plain', raw_buf), ('decrypted', dec_buf)):
+                if len(buf) > 8192:
+                    print(f'[!] buffer overflow on channel {channel} ({label}), resetting')
+                    buf[:] = b''
+                    continue
+                while True:
+                    obj_bytes, rest = try_extract(buf)
+                    if obj_bytes is None:
+                        break
+                    buf[:] = rest
+                    try:
+                        import json
+                        obj = json.loads(obj_bytes)
+                        print(f'[<] JSON from {addr} (channel {channel}, {label}): {json.dumps(obj)}')
+                    except Exception:
+                        print(f'[<] channel {channel} {label}: braces matched but not valid JSON ({len(obj_bytes)}B): {obj_bytes[:120]}')
     except socket.timeout:
         pass
     print('[*] done listening')
