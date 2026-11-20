@@ -33,11 +33,20 @@ Short bullets only: hardware IDs, BLE UUIDs, endpoints, command formats.
 - 7 ATT writes in the session (Wi-Fi provisioning likely; payloads not yet inspected)
 - bugreport path of log: FS/data/log/bt/btsnoop_hci.log
 
+## BLE protocol (from pairing capture)
+- Write char = handle 0x000d (...0180858c), notify char = handle 0x000f (...0280858c), CCCD 0x0010
+- Frame: ff 09 | len LE16 (whole frame) | 01 00 (phone->base) / 01 30 (base->phone) | msg id | c0 | payload
+- Payload high-entropy (likely encrypted); same-kind msgs share a 3-4 byte prefix (type field or fixed IV, unknown)
+- Likely flow: enable notify; base sends ~25x 105/121B notifs (Wi-Fi scan list?); 169B write (Wi-Fi creds?); later 41/137/137B writes (cloud bind?)
+- Phone log shows no sock traffic -> sock likely added via base/cloud (unverified)
+- Note: tshark -e btatt.value prints hex without colons; byte len = chars/2
+
 ## TODO
 - [x] Base IP, nmap ports
 - [x] Base DNS hostnames
 - [x] HCI snoop extracted (pairing capture)
-- [ ] Inspect ATT write/notify headers + handle->UUID map
+- [x] Inspect ATT write/notify headers + handle->UUID map
+- [ ] APK: find app type (native/Flutter/RN), grep UUID, find crypto/key setup
 - [ ] Idle-use capture (does phone talk to base/sock after pairing?)
 - [ ] TLS probe of 32290 (openssl s_client)
 - [ ] Decompile APK (user to supply)
