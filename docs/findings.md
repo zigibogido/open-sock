@@ -20,8 +20,15 @@ Short bullets only: hardware IDs, BLE UUIDs, endpoints, command formats.
 ## Environment
 - User runs Localkit (Petkit) with Pi-hole DNS redirects; same pattern may apply to the base
 
+## Base network (192.168.7.3, MAC 90:BF:D9:9F:B6:53)
+- TCP open (tcpwrapped): 32290, 32292, 32293, 32295, 32392. TCP 80 filtered. UDP top-50: nothing
+- DNS: care-app.eufylife.com, pushproxy-usa5/usa11.eufylife.com, security-traefik-us-prod-*.us-east-2.elb.amazonaws.com, time4.google.com, icanhazip.com
+- Pairing timeline (phone clock 2026-11-20): 15:32:00 QR, 15:32:25 beep, 15:32:41 wifi, 15:33:03 setup ok, 15:33:20 sock on base, 15:33:32 sock added
+- WARNING: HCI snoop likely contains Wi-Fi credentials; keep out of git
+
 ## TODO
-- [ ] Base IP, nmap ports (work/base-tcp.txt)
-- [ ] Base DNS hostnames (Pi-hole)
-- [ ] HCI snoop: pairing capture + idle-use capture
+- [x] Base IP, nmap ports
+- [x] Base DNS hostnames
+- [ ] HCI snoop: extract from bugreport, then idle-use capture
+- [ ] TLS probe of 32290 (openssl s_client)
 - [ ] Decompile APK (user to supply)
