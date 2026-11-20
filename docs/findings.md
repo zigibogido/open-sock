@@ -26,9 +26,18 @@ Short bullets only: hardware IDs, BLE UUIDs, endpoints, command formats.
 - Pairing timeline (phone clock 2026-11-20): 15:32:00 QR, 15:32:25 beep, 15:32:41 wifi, 15:33:03 setup ok, 15:33:20 sock on base, 15:33:32 sock added
 - WARNING: HCI snoop likely contains Wi-Fi credentials; keep out of git
 
+## BLE (HCI snoop, pairing capture 2026-11-20)
+- Only Eufy device seen: eufy_5EC0 @ 90:bf:d9:a7:5e:c0 (likely base in setup mode). Sock never advertised by name to the phone
+- Custom GATT service 2520567c-05cf-6eb4-c541-02030080858c (tshark byte order, may be reversed)
+  - chars ...0180858c, ...0280858c (probably write + notify, unconfirmed)
+- 7 ATT writes in the session (Wi-Fi provisioning likely; payloads not yet inspected)
+- bugreport path of log: FS/data/log/bt/btsnoop_hci.log
+
 ## TODO
 - [x] Base IP, nmap ports
 - [x] Base DNS hostnames
-- [ ] HCI snoop: extract from bugreport, then idle-use capture
+- [x] HCI snoop extracted (pairing capture)
+- [ ] Inspect ATT write/notify headers + handle->UUID map
+- [ ] Idle-use capture (does phone talk to base/sock after pairing?)
 - [ ] TLS probe of 32290 (openssl s_client)
 - [ ] Decompile APK (user to supply)
