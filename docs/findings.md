@@ -305,3 +305,18 @@ Before testing, must repeat the same extraction process against a real captured 
 - **Immediately reverted** to the original values; confirmed via readback back to `230-230-100-80,90-80,1-1`.
 - This is the third command type confirmed write-capable (3515 brightness, 3516 move_threshold, 3519 HR/SpO2 thresholds), using the exact same `build_command_packet()` approach each time — just needs the per-command subtype extracted fresh from a real capture before each new command type.
 - **Full read+write parity achieved for all three currently-known settings commands.** Next for broader app parity: capture more app screens (sleep schedule, notification toggles, factory reset, firmware update trigger, etc.) to discover additional `cmd` numbers not yet seen.
+
+## New commands discovered from settings sweep (2026-11-20)
+Capturing the app while going through Working Mode, HR min/max, brightness, and Me/profile screens surfaced several new `cmd` numbers:
+
+- **`cmd 3546`**: `{"mode":1}` — almost certainly the Sock's **Working Mode** toggle (Standard/Mute). Value seen was `1`; need one more sample with the other state to confirm which number means which mode.
+- **`cmd 3509`**: child/baby profile — `{"bindStatus":2,"birthdate":"","child_id":2290633,"gender":-1,"height":0,"name":"Bill","race":0,"weight":0}`. This is the "Me → Child profile" screen.
+- **`cmd 1201`**: `{"time_out":2,"user_name":"Joshwbridgman"}` — unclear screen mapping yet (didn't correlate cleanly to Time Settings; `user_name` held the account holder's display name, so this may be an account/session command rather than a device setting, possibly fired automatically rather than tied to a specific tap).
+- **`cmd 3519` reconfirmed** with new values matching the app's actual HR slider range (`hr_warning_down`:40, `hr_warning_up`:120) — consistent with the documented UI range (min 40-100, max 120-250).
+- **`cmd 3515` reconfirmed** with `brightness_auto:1` (auto mode) and `brightness:11` — confirms the "Ring brightness: auto vs manual (10 options)" UI maps directly onto this same command/field pair.
+
+### Still not captured this round
+Voice Prompt toggles (4 booleans), App Notification toggles (4 booleans — these may be phone-local-only, never hitting the network, since they control what the app itself displays rather than base behavior), Audio volume (distinct from ring brightness — 25 options per the UI), device name change (sock and base), time format (12/24) and timezone. Needs another targeted sweep, ideally touching one setting at a time with a brief pause between each so traffic can be correlated to the specific screen.
+
+### Privacy note
+`cmd 3509` and `cmd 1201` carry personal information (a child's name, an account holder's display name) by design — this is normal app behavior, not a vulnerability. Pushed as-is, consistent with the earlier decision on serials/keys/account_id.
