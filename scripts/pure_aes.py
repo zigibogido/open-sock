@@ -77,6 +77,51 @@ def inv_shift_rows(state):
         state[r] = state[r][-r:] + state[r][:-r]
 
 
+def sub_bytes(state):
+    for r in range(4):
+        for c in range(4):
+            state[r][c] = Sbox[state[r][c]]
+
+
+def shift_rows(state):
+    for r in range(1, 4):
+        state[r] = state[r][r:] + state[r][:r]
+
+
+def mix_columns(state):
+    for c in range(4):
+        col = [state[r][c] for r in range(4)]
+        state[0][c] = gmul(col[0],2)^gmul(col[1],3)^col[2]^col[3]
+        state[1][c] = col[0]^gmul(col[1],2)^gmul(col[2],3)^col[3]
+        state[2][c] = col[0]^col[1]^gmul(col[2],2)^gmul(col[3],3)
+        state[3][c] = gmul(col[0],3)^col[1]^col[2]^gmul(col[3],2)
+
+
+def encrypt_block(block, w):
+    state = [[block[r + 4*c] for c in range(4)] for r in range(4)]
+    Nr = 10
+    add_round_key(state, w, 0)
+    for rnd in range(1, Nr):
+        sub_bytes(state)
+        shift_rows(state)
+        mix_columns(state)
+        add_round_key(state, w, rnd)
+    sub_bytes(state)
+    shift_rows(state)
+    add_round_key(state, w, Nr)
+    return bytes(state[r][c] for c in range(4) for r in range(4))
+
+
+def aes128_ecb_encrypt(data: bytes, key: bytes) -> bytes:
+    assert len(key) == 16
+    assert len(data) % 16 == 0
+    w = key_expansion(key)
+    out = bytearray()
+    for i in range(0, len(data), 16):
+        out += encrypt_block(data[i:i+16], w)
+    return bytes(out)
+
+
 def inv_mix_columns(state):
     for c in range(4):
         col = [state[r][c] for r in range(4)]
