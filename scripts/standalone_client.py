@@ -39,7 +39,8 @@ if TEST_CMD_OBJ is not None:
 # (24-byte header total before ciphertext).
 COMMAND_SUBTYPES = {
     3515: bytes.fromhex('460590000000010000010000'),  # brightness -- verified write
-    3516: bytes.fromhex('4605a000000001002c010000'),  # move_threshold/tones_pushes
+    3516: bytes.fromhex('4605a000000001002c010000'),  # move_threshold/tones_pushes -- verified write
+    3519: bytes.fromhex('46057001000001002c010000'),  # HR/SpO2 alert thresholds
 }
 DEFAULT_SUBTYPE = COMMAND_SUBTYPES[3515]
 
