@@ -3,12 +3,22 @@
 For personal use against the user's own device. Read-only test: discover, handshake,
 listen for telemetry pushes.
 """
+import json
 import socket
 import sys
 import time
 from binascii import unhexlify
 
 import pure_aes
+
+# optional: pass a path to a JSON file on argv[1] to test a write, e.g.
+#   echo '{"cmd":3516,"payload":{"move_threshold":35,"tones_pushes":5143}}' > cmd.json
+#   python3 standalone_client.py cmd.json
+# account_id/mChannel/mValue3 are filled in automatically if omitted.
+TEST_CMD_OBJ = None
+if len(sys.argv) > 1:
+    with open(sys.argv[1]) as f:
+        TEST_CMD_OBJ = json.load(f)
 
 KEY = b'REDACTED-AES-KEY'
 BROADCAST_PORT = 32108
@@ -18,13 +28,20 @@ BASE_IP = '192.168.7.3'
 
 
 ACCOUNT_ID = 'REDACTED-ACCOUNT-ID'
+if TEST_CMD_OBJ is not None:
+    TEST_CMD_OBJ.setdefault('account_id', ACCOUNT_ID)
+    TEST_CMD_OBJ.setdefault('mChannel', 0)
+    TEST_CMD_OBJ.setdefault('mValue3', 0)
 
-# known-good template for a channel-0 command packet (cmd 3515, brightness).
-# header is f1 d0 <len> d1 00 <msgid> 58 5a 59 48 46 05 90 00 00 00 00 01 00 00 01 00 00
-# (24 bytes); we keep the subtype bytes (46 05 90 ...) as-is and only vary
-# the msgid and the encrypted payload. len/payload length will differ per
-# command so the whole header is rebuilt, not just copied.
-COMMAND_SUBTYPE = bytes.fromhex('460590000000010000010000')
+# the 12-byte "subtype" after the XZYH tag is command-specific, not a
+# universal constant -- verified against real captured packets per cmd.
+# header overall is f1 d0 <len> d1 00 <msgid> 58 5a 59 48 <subtype> <ciphertext>
+# (24-byte header total before ciphertext).
+COMMAND_SUBTYPES = {
+    3515: bytes.fromhex('460590000000010000010000'),  # brightness -- verified write
+    3516: bytes.fromhex('4605a000000001002c010000'),  # move_threshold/tones_pushes
+}
+DEFAULT_SUBTYPE = COMMAND_SUBTYPES[3515]
 
 
 def aes_ecb_decrypt(ct: bytes) -> bytes:
@@ -41,13 +58,26 @@ def build_command_packet(cmd_obj: dict, msgid: int) -> bytes:
     """Build a channel-0 f1 d0 command packet carrying cmd_obj as JSON,
     AES-128-ECB encrypted with the known key, zero-padded to a block
     boundary. Verified byte-for-byte identical to a real captured
-    cmd 3515 (brightness) packet when given the same inputs."""
+    cmd 3515 (brightness) packet when given the same inputs.
+
+    Field order is forced to match the real wire format exactly
+    (account_id, cmd, mChannel, mValue3, payload) -- the base may do
+    byte-level validation, not just semantic JSON parsing, so don't
+    rely on the caller's dict insertion order."""
     import json
-    j = json.dumps(cmd_obj, separators=(',', ':')).encode()
+    ordered = {
+        'account_id': cmd_obj.get('account_id', ACCOUNT_ID),
+        'cmd': cmd_obj['cmd'],
+        'mChannel': cmd_obj.get('mChannel', 0),
+        'mValue3': cmd_obj.get('mValue3', 0),
+        'payload': cmd_obj['payload'],
+    }
+    j = json.dumps(ordered, separators=(',', ':')).encode()
     pad = (-len(j)) % 16
     plain = j + b'\x00' * pad
     ct = aes_ecb_encrypt(plain)
-    sub = bytes.fromhex('585a5948') + COMMAND_SUBTYPE
+    subtype = COMMAND_SUBTYPES.get(cmd_obj['cmd'], DEFAULT_SUBTYPE)
+    sub = bytes.fromhex('585a5948') + subtype
     body = bytes.fromhex('d100') + msgid.to_bytes(2, 'big') + sub + ct
     total_len = len(body)
     header = bytes.fromhex('f1d0') + total_len.to_bytes(2, 'big')
@@ -183,15 +213,11 @@ def main():
                 s.sendto(bytes(pkt), base_addr)
                 status_msgid += 1
                 next_status = time.time() + 0.3
-            if not command_sent and time.time() >= command_send_at:
-                cmd_obj = {
-                    'account_id': ACCOUNT_ID, 'cmd': 3515, 'mChannel': 0,
-                    'mValue3': 0, 'payload': {'brightness': 9, 'brightness_auto': 0},
-                }
+            if not command_sent and TEST_CMD_OBJ is not None and time.time() >= command_send_at:
                 cmd_msgid = status_msgid  # stay in-sequence with the running status counter
-                cmd_pkt = build_command_packet(cmd_obj, cmd_msgid)
+                cmd_pkt = build_command_packet(TEST_CMD_OBJ, cmd_msgid)
                 s.sendto(cmd_pkt, base_addr)
-                print(f'[>] sent WRITE command (cmd 3515 brightness=9) msgid={cmd_msgid} (0x{cmd_msgid:04x}): {cmd_pkt.hex()}')
+                print(f'[>] sent WRITE command (cmd {TEST_CMD_OBJ.get("cmd")}) msgid={cmd_msgid} (0x{cmd_msgid:04x}): {json.dumps(TEST_CMD_OBJ)}')
                 status_msgid += 1
                 command_sent = True
             try:
