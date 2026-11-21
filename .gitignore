@@ -5,3 +5,12 @@ work/
 *.pcapng
 *.btsnoop
 *.log
+
+# Secrets, just in case any end up outside work/.
+*.keystore
+secrets/
+*_creds.txt
+*token*.txt
+
+# Claude Code harness-internal state, not project content.
+.claude/
