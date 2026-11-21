@@ -1,3 +1,14 @@
+# Resume here (eufy app anti-tamper thread)
+
+- **Current best-known-good gadget script**: `work/frida_project/poll_block.js`, embedded in `work/apk_pull/com.oceanwing.care.cam/binder3_signed.apk`. Defeats the full native kill chain at `LoginActivity` (sendSignal/kill/tgkill/raise/exit/_exit/abort/close, raw inlined syscalls via per-thread Stalker) and the Java-level HOME self-minimize fallback (native `IPCThreadState::transact()` hook). Rebuild via the standard pipeline in `work/apk_pull/com.oceanwing.care.cam/` (`apktool b -f fix2_decoded -o <name>_unsigned.apk` → `zipalign` → `apksigner sign` with `debug.keystore`) after copying the current script to `fix2_decoded/lib/arm64-v8a/libfrida-gadget.script.so`.
+- **One open blocker**: a `system_server`-initiated `SIGKILL` lands exactly ~10.1s after the HOME-intent block fires, with zero in-process trace (see "Pinned down the remaining ~10s kill" below) — looks like a kill from *outside* the instrumented process, not something in-app hooks can see or stop.
+- **Recommended next step**: don't try to solve the 10s kill first — drive an automated login attempt (email/password already saved, see below) within that clean ~10s window and see whether `DecryptECC` captures real key material before it lands. That's the actual goal; the 10s mystery may turn out to be irrelevant once login succeeds.
+- **Credentials and tokens — paths only, values are intentionally not in this file** (this file is committed and pushed to GitHub; never paste secrets into it):
+  - Eufy account email/password: `work/secrets/eufy_creds.txt` (local only, gitignored, `chmod 600`).
+  - GitHub personal access token (pushes to this repo): `work/secrets/github_token.txt` (same — local only, gitignored).
+  - This repo: `zigibogido/open-sock` on GitHub, working branch `claude/eufy-app-reverse-engineer-bridge-hju3bx`. Remote already configured in `.git/config` with the token embedded in the URL — `git push origin claude/eufy-app-reverse-engineer-bridge-hju3bx` just works from this machine; no need to re-enter the token.
+  - Android device: USB serial `41bdf203` ("Mi 9T"), rooted via Magisk.
+
 # Manifest findings: com.oceanwing.care.cam.apk (sha256 c9598e80…bed1)
 
 - Package `com.oceanwing.care.cam`, v2.2.5_3347 (code 3347), minSdk 21, target 36. Split APK (`requiredSplitTypes=base__abi`); native libs are in config.*.apk.
