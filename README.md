@@ -64,6 +64,79 @@ settings, with the official app completely closed throughout.
   the client, since neither `openssl` nor a crypto pip package were worth
   installing on-device for this.
 
+## Sending commands directly (without the official app)
+
+`scripts/standalone_client.py` can both *read* live telemetry/settings and
+*write* settings back to the base, over the same local UDP PPCS protocol the
+official app uses — just without the app running.
+
+### Quick start
+
+Reading is the default mode — just run the script with no arguments and it
+discovers the base, completes the handshake, and prints decoded telemetry and
+settings pushes as they arrive:
+
+```sh
+python3 scripts/standalone_client.py
+```
+
+To send a **write** command, put the command as JSON in a file and pass its
+path as the one argument:
+
+```sh
+echo '{"cmd":3515,"payload":{"brightness":9,"brightness_auto":0}}' > cmd.json
+python3 scripts/standalone_client.py cmd.json
+```
+
+`account_id`, `mChannel`, and `mValue3` are filled in automatically if you
+omit them (see `ACCOUNT_ID`/`TEST_CMD_OBJ` near the top of the script) — you
+normally only need to supply `cmd` and `payload`.
+
+### How a command packet is built
+
+Every command — read or write — is a UDP packet with this wire layout:
+
+```
+f1 d0 <total_len:u16be> d1 00 <msgid:u16be> 58 5a 59 48 <12-byte subtype> <AES-128-ECB ciphertext>
+```
+
+- The 24 bytes before the ciphertext are a fixed header; `XZYH` (`58 5a 59
+  48`) is a constant tag.
+- The **12-byte "subtype"** right after `XZYH` is **specific to each `cmd`
+  number**, not a universal constant — reusing one command's subtype for a
+  different command gets the packet silently dropped (no ack, looks
+  identical to "the base rejected the value"). `COMMAND_SUBTYPES` in the
+  script holds the subtypes extracted from real captured packets for each
+  command verified so far; extracting a new command's subtype from a real
+  capture is required before testing it.
+- The ciphertext is the command's JSON, with keys in this exact order
+  (`account_id`, `cmd`, `mChannel`, `mValue3`, `payload`), zero-padded to a
+  16-byte boundary, encrypted with AES-128-ECB using the key documented in
+  `docs/findings.md` (not repeated here to avoid a second place to keep in
+  sync — see the script for the literal key and account ID already in use).
+
+### Known commands
+
+| `cmd` | Direction | Status | Payload shape | Notes |
+|---|---|---|---|---|
+| 3503 | base → phone | read (periodic) | `{"sn","rssi","wear","hr","oxy","move","move_val","wear_val","wear_threshold","charge","battery_vol","signal_quality","cur_sleep_start/end/duration","time"}` | Live sock telemetry, pushed frequently while worn. |
+| 3515 | phone → base | **write verified** | `{"brightness":0-11,"brightness_auto":0\|1}` | Base status LED. `brightness_auto:1` = auto mode (ignores explicit `brightness`). |
+| 3516 | phone → base | **write verified** | `{"move_threshold":N,"tones_pushes":N}` | Movement alert threshold; also sent periodically as a heartbeat with just `tones_pushes` incrementing. |
+| 3519 | phone → base | **write verified** | `{"hr_advance_enable","hr_dangerous_down/up","hr_warning_down/up","hr_warning_down_real/up_real","o2_dangerous_down","o2_warning_down","o2_warning_down_real","oxy_advance_enable"}` | HR/SpO2 safety-alert thresholds. UI range for warning thresholds is roughly 40-250 bpm. Test with a small tweak, not by disabling (`*_advance_enable:0`). |
+| 3546 | phone → base | mapping confirmed, write not yet tested | `{"mode":0\|1}` | Working Mode: `0` = Standard, `1` = Mute. |
+| 3509 | phone → base | read only so far | `{"bindStatus","birthdate","child_id","gender","height","name","race","weight"}` | Child/baby profile (the "Me → Child profile" screen). Contains personal info by design. |
+| 1201 | phone → base | read only, purpose unclear | `{"time_out":N,"user_name":"..."}` | Seen fired automatically, not tied to a specific UI action; may be account/session-related rather than a device setting. |
+| — (bulk params dump) | base → phone | read only | `{"params":[{"dev_type","param_type","param_value"}, ...],"main_sw_version","sec_sw_version"}` | Fragmented across multiple ~1032-byte packets + a short terminator. 77 params observed. `param_type 3519` is the packed form of the `cmd 3519` thresholds; `param_type 1176` is the base's LAN IP; `param_type 1296` is the region code. Use this to verify a write actually took effect — read the relevant `param_type` back rather than trusting the ack alone. |
+
+A command's JSON field name doesn't necessarily match the closest-looking
+`param_type` number in the bulk dump — confirm any new mapping by diffing the
+params dump before/after a write, the same way each command above was
+verified.
+
+See `docs/findings.md` for the full handshake sequence, the AES key and how
+it was found, and the complete, continuously-updated investigation log this
+table is drawn from.
+
 ## Safety / scope note
 
 This only works against a base that already trusts your device's IP from
