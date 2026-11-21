@@ -49,13 +49,33 @@ settings, with the official app completely closed throughout.
   setup flow entirely (or building a minimal web-based pairing flow) — not
   yet investigated.
 
+## Requirements
+
+- A Eufy Smart Sock (T8340) and its base (T8351), already paired with the
+  official app at least once.
+- A computer or Android device on the same LAN as the base.
+- Python 3 (standard library only — no `pip install` needed) to run
+  `scripts/standalone_client.py`.
+- Root access (e.g. Magisk) on an Android device that's been paired with the
+  base, *only* if you need to (re-)extract the AES key for your own base —
+  see `docs/protocol-findings.md` for how. If you already have the key for
+  your base, root isn't needed for day-to-day use of the standalone client.
+
 ## Repo layout
 
-- `docs/findings.md` — the detailed, continuously-updated reverse-engineering
-  log: hardware IDs, protocol byte layouts, the exact handshake sequence, the
-  AES key and how it was found, the full command catalog, and setup notes for
-  reproducing the rooted-device toolchain (Magisk, Termux, frida-server
-  version quirks, etc.)
+- `docs/protocol-findings.md` — the detailed, narrative reverse-engineering
+  log for the local LAN protocol covered by this README: hardware IDs, BLE
+  pairing capture, the PPCS/UDP packet format, the handshake sequence, how
+  the AES key was found, and the full command catalog. Read this if you want
+  the "how do we know that" story, not just the result.
+- `docs/findings.md` — a much larger, rawer, continuously-updated working
+  log kept during the investigation, including a separate, not-yet-finished
+  side investigation into the app's cloud account API (a different,
+  much harder problem — reverse-engineering a vendor's HTTPS backend rather
+  than a LAN device you own — tracked independently of this repo's main,
+  finished local-protocol result above). Mentioned here for completeness;
+  `docs/protocol-findings.md` is the one to read for the actual, working
+  local protocol this README describes.
 - `scripts/standalone_client.py` — a working, dependency-free (pure Python,
   no pip packages) standalone client. Runs on the paired phone itself (e.g.
   via Termux) and independently discovers the base, completes the handshake,
@@ -63,6 +83,10 @@ settings, with the official app completely closed throughout.
 - `scripts/pure_aes.py` — a small pure-Python AES-128 implementation used by
   the client, since neither `openssl` nor a crypto pip package were worth
   installing on-device for this.
+- `work/` — gitignored scratch space (decompiled app code, packet captures,
+  device backups). Not part of this repo; mentioned so it doesn't come as a
+  surprise if you're working from a clone of the working directory rather
+  than the GitHub repo itself.
 
 ## Sending commands directly (without the official app)
 
