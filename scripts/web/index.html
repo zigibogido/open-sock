@@ -210,7 +210,57 @@ async function setAlerts() {
   } catch (e) { setStatus('alerts-status', e.message, false); }
 }
 
+function paramValue(params, type) {
+  const p = params.find(x => x.param_type === type);
+  return p ? p.param_value : null;
+}
+
+async function loadCurrentSettings() {
+  setStatus('telem-status', 'loading current settings… (~10s)', true);
+  try {
+    const p = await api('/api/params');
+    const params = p.params || [];
+
+    const brightness = paramValue(params, 3515);
+    if (brightness !== null) {
+      document.getElementById('brightness').value = brightness;
+      document.getElementById('brightness-num').value = brightness;
+    }
+
+    // param_type 3520, not 3516, is the wire identity of this value -- see docs/protocol-findings.md.
+    const moveThreshold = paramValue(params, 3520);
+    if (moveThreshold !== null) {
+      document.getElementById('move-threshold').value = moveThreshold;
+    }
+
+    // param_type 3519 is a packed string: hr_warning_up-hr_dangerous_up-hr_warning_down-
+    // hr_dangerous_down,o2_warning_down-o2_dangerous_down,hr_advance_enable-oxy_advance_enable
+    const packed = paramValue(params, 3519);
+    if (packed) {
+      const [hrPart, o2Part, flagsPart] = packed.split(',');
+      const [hrWarnUp, hrDangerUp, hrWarnDown, hrDangerDown] = hrPart.split('-').map(Number);
+      const [o2WarnDown, o2DangerDown] = o2Part.split('-').map(Number);
+      const [hrEnable, oxyEnable] = flagsPart.split('-').map(Number);
+      document.getElementById('hr_warning_up').value = hrWarnUp;
+      document.getElementById('hr_dangerous_up').value = hrDangerUp;
+      document.getElementById('hr_warning_down').value = hrWarnDown;
+      document.getElementById('hr_dangerous_down').value = hrDangerDown;
+      document.getElementById('o2_warning_down').value = o2WarnDown;
+      document.getElementById('o2_dangerous_down').value = o2DangerDown;
+      document.getElementById('hr_advance_enable').checked = !!hrEnable;
+      document.getElementById('oxy_advance_enable').checked = !!oxyEnable;
+    }
+    // Note: there's no confirmed readback mapping yet for brightness_auto specifically,
+    // so that checkbox is left as-is rather than guessed from an unconfirmed param.
+
+    setStatus('telem-status', 'loaded current settings ' + new Date().toLocaleTimeString(), true);
+  } catch (e) {
+    setStatus('telem-status', 'could not load current settings: ' + e.message, false);
+  }
+}
+
 refreshTelemetry();
+loadCurrentSettings();
 </script>
 </body>
 </html>
