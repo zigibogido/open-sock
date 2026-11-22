@@ -117,7 +117,8 @@
   <div class="sub">Talks directly to the base over the LAN. No Eufy app or cloud involved.</div>
   <div id="settings-load-status" class="status" style="margin:-10px 0 16px;"></div>
 
-  <div class="card" style="max-width: 720px;">
+  <div class="settings-grid">
+  <div class="card">
     <h2>History</h2>
     <div class="range-row" id="range-row">
       <button class="range-btn" data-minutes="60">1h</button>
@@ -146,7 +147,6 @@
     <div id="history-table-wrap" style="display:none; max-height: 260px; overflow:auto;"></div>
   </div>
 
-  <div class="settings-grid">
   <div class="card settings-card loading" id="card-brightness">
     <h2>Brightness</h2>
     <div class="row">
@@ -201,7 +201,7 @@
     <div id="mode-status" class="status"></div>
   </div>
 
-  <div class="card settings-card loading" id="card-movement">
+  <div class="card settings-card loading" id="card-movement" style="grid-column: 1 / -1;">
     <details>
       <summary style="cursor:pointer;"><h2 style="display:inline;">Other settings (unconfirmed)</h2></summary>
     <div class="sub" style="margin:8px 0 12px;">Grouped here because it's not known whether any of these actually do
