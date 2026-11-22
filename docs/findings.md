@@ -72,6 +72,28 @@ User only cares about the **Eufy Sock** (T8340, nRF52840) + its base (T8351, MT7
 ## Topology (inferred, unverified)
 - sock --BLE--> base --Wi-Fi--> Eufy cloud --> app. Unknown if app talks to sock/base directly post-pairing.
 
+## RESOLVED: base talks to AWS cloud infra autonomously, independent of the app (2026-11-22)
+Base's USB-C port confirmed **charge-only, no data lines** (zero kernel USB enumeration across a clean unplug/replug test with `dmesg -w` watching). Ruled out as a debug/flashing path; the TXD/RXD/3V3/GND UART pads remain the real hardware entry point.
+
+ARP-spoofed the base (host MITM between 192.168.7.3 and the 192.168.4.1 gateway, `arpspoof` both directions + `ip_forward=1`), captured 45s with the phone app not merely closed but unopened for an extended period beforehand — confirms this is unprompted base behavior, not app-triggered:
+- Base sent an identical 48-byte `f1 12 00 2c ...` PPCS-framed beacon (same `f1`-prefixed envelope as the already-cracked local sock protocol) round-robin to **three AWS IPs** (3.13.12.246, 184.72.36.250, 18.211.176.129) on **UDP/32100** — looks like P2P relay/rendezvous-server registration, consistent with the AWS ELB hostnames already seen in base DNS lookups.
+- Also attempted a **TLS connection on port 443 to a fourth AWS IP** (13.185.148.251) — SYN retries with 1s/2s/4s/4s backoff, never got a SYN-ACK back through the MITM path. Most likely this host's `ufw` default-deny FORWARD chain silently ate the return packet (same class of gotcha as the earlier mitmproxy phone session), not necessarily a base-side failure — unconfirmed either way, not re-tested with `ufw` disabled.
+- Tried decrypting the UDP beacon with the known local AES key (`REDACTED-AES-KEY`, AES-128-ECB) at header offsets 0 and skip-to-16 — garbage both times. Not surprising: this is very likely a different message class (relay keepalive/registration) from the `f1 d0` sock-telemetry packets that key was cracked for, so may use a different key or no app-layer encryption at this sub-protocol at all. Not pursued further this round.
+
+**Conclusion: base↔cloud is a real, independent channel — the base is not merely a dumb relay proxied through the phone app.** This opens the base's own cloud traffic as a second interception point, with no app-level anti-tamper (ijiami packer, root/Frida detection, cert pinning) in the way at all, since none of that lives on the base.
+
+## Confirmed: cloud settings pushes work, and trigger a UDP NAT-hole-punch burst from the base (2026-11-22)
+Goal clarified: understand how app settings changes reach the base, specifically whether they go through the cloud (initial testing suggested yes) — with an eye toward eventually replacing Eufy's cloud with a self-hosted relay for this exact purpose.
+
+- **Confirmed cloud settings-push works end-to-end**: with the phone on mobile data (off the home LAN entirely, app freshly reinstalled for one test), changing a sock setting from the app succeeded immediately, no error, repeatedly. Settings genuinely propagate app → cloud → base, not just over LAN.
+- **At the moment of a real cloud-pushed change, the base fires a burst of ~267 UDP packets (32 bytes each, src port 11014) to a single external IP, sprayed across dozens of sequential destination ports (~58479-58485+) within about 1 second** — classic UDP NAT hole-punching, trying to open a direct P2P path to a peer (likely the phone's carrier-NAT'd public IP at that moment) rather than relaying everything through the known AWS relay IPs. No response from that IP was seen in the capture that caught this, so the hole-punch may have failed or succeeded via a path outside the capture window; the setting still landed either way (relay fallback, or a punch that worked outside what we saw).
+- Not yet decrypted / not yet confirmed the destination IP is really the phone's — next step.
+
+### Caution for future sessions: ARP-spoofing the base for MITM capture is unreliable here
+Repeated spoof/unspoof cycles against the base (needed since this host's NIC in normal managed mode can't see the base's unicast Wi-Fi frames otherwise — confirmed no base traffic is visible without being in the MITM path) reliably destabilized the base's cloud relay session after a few rounds in one sitting: its periodic AWS beacon traffic stopped appearing even under a freshly-restarted, confirmed-active spoof, and the app later reported the sock/base as fully "offline" for real. Recovered both times via the app's own refresh (no power-cycle needed), so it's a soft cloud-session-state issue, not anything physically wrong — but it's a real cost for no decrypted payload gained so far. **Recommendation: stop ARP-spoofing the live base for this specific investigation.** Better options for continuing, in rough order of preference:
+1. Capture from the already-rooted Mi 9T phone's own interface (`tcpdump` on its cellular/rmnet interface while on mobile data) during a triggered settings change — zero risk to the base's state, and directly answers whether the hole-punch packets actually arrive at the phone (confirms/denies it's really P2P-to-phone, not just relay-to-AWS) and gives payload bytes to decrypt from the phone side instead.
+2. A second Wi-Fi adapter in monitor mode + the network's WPA2 passphrase, if available, for fully passive decrypt-capable capture with zero interference to the base's ARP state.
+
 ## Base network (192.168.7.3, MAC 00:00:00:00:00:00)
 - TCP open (tcpwrapped): 32290, 32292, 32293, 32295, 32392. TCP 80 filtered. UDP top-50: nothing.
 - DNS: care-app.eufylife.com, pushproxy-usa5/usa11.eufylife.com, security-traefik-us-prod-*.us-east-2.elb.amazonaws.com, time4.google.com, icanhazip.com.
