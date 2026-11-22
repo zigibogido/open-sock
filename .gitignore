@@ -14,3 +14,6 @@ secrets/
 
 # Claude Code harness-internal state, not project content.
 .claude/
+
+__pycache__/
+*.pyc

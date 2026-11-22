@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eufy Sock — self-hosted control</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #262b36; --text: #e6e8ec;
+    --muted: #8b93a3; --accent: #4f8cff; --ok: #3ddc84; --err: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    padding: 16px; max-width: 720px; margin-inline: auto;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 10px; }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  label { font-size: 0.85rem; color: var(--muted); min-width: 140px; }
+  input[type=number], input[type=text] {
+    background: #0c0e12; border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 8px; width: 110px; font-size: 0.95rem;
+  }
+  input[type=range] { flex: 1; min-width: 120px; }
+  button {
+    background: var(--accent); color: white; border: none; border-radius: 6px;
+    padding: 8px 14px; font-size: 0.9rem; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: #2a2f3b; }
+  .status { font-size: 0.82rem; margin-top: 6px; min-height: 1.2em; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  .telem-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .telem-item { background: #0c0e12; border-radius: 6px; padding: 8px; }
+  .telem-item .k { font-size: 0.72rem; color: var(--muted); }
+  .telem-item .v { font-size: 1.05rem; font-weight: 600; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; }
+</style>
+</head>
+<body>
+  <h1>Eufy Sock — self-hosted control</h1>
+  <div class="sub">Talks directly to the base over the LAN. No Eufy app or cloud involved.</div>
+
+  <div class="card">
+    <h2>Telemetry</h2>
+    <div id="telem" class="telem-grid"><div class="telem-item"><div class="k">—</div><div class="v">no data yet</div></div></div>
+    <div class="row" style="margin-top:12px;">
+      <button onclick="refreshTelemetry()">Refresh telemetry</button>
+      <button class="secondary" onclick="refreshParams()">Read full params dump</button>
+    </div>
+    <div id="telem-status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Brightness</h2>
+    <div class="row">
+      <label for="brightness">Level (0-11)</label>
+      <input type="range" id="brightness" min="0" max="11" value="5">
+      <input type="number" id="brightness-num" min="0" max="11" value="5">
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="brightness-auto">
+      <label for="brightness-auto" style="min-width:auto;">Auto brightness</label>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button onclick="setBrightness()">Apply</button>
+    </div>
+    <div id="brightness-status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Movement alert threshold</h2>
+    <div class="row">
+      <label for="move-threshold">Threshold</label>
+      <input type="number" id="move-threshold" value="30">
+    </div>
+    <div class="row">
+      <button onclick="setMovement()">Apply</button>
+    </div>
+    <div id="movement-status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Heart rate / SpO2 alert thresholds</h2>
+    <div class="row"><label>HR warning (low/high)</label>
+      <input type="number" id="hr_warning_down" value="80"><input type="number" id="hr_warning_up" value="230"></div>
+    <div class="row"><label>HR danger (low/high)</label>
+      <input type="number" id="hr_dangerous_down" value="100"><input type="number" id="hr_dangerous_up" value="250"></div>
+    <div class="row"><label>SpO2 warning / danger (low)</label>
+      <input type="number" id="o2_warning_down" value="80"><input type="number" id="o2_dangerous_down" value="90"></div>
+    <div class="checkbox-row"><input type="checkbox" id="hr_advance_enable" checked>
+      <label style="min-width:auto;">HR alerts enabled</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="oxy_advance_enable" checked>
+      <label style="min-width:auto;">SpO2 alerts enabled</label></div>
+    <div class="row" style="margin-top:10px;">
+      <button onclick="setAlerts()">Apply</button>
+    </div>
+    <div id="alerts-status" class="status"></div>
+  </div>
+
+<script>
+const AUTH_TOKEN = localStorage.getItem('eufy_api_token') || '';
+
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({}, opts.headers, AUTH_TOKEN ? { 'Authorization': 'Bearer ' + AUTH_TOKEN } : {});
+  const res = await fetch(path, opts);
+  const json = await res.json();
+  if (!res.ok || !json.ok) throw new Error(json.error || ('HTTP ' + res.status));
+  return json.data;
+}
+
+function setStatus(id, msg, ok) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+}
+
+function renderTelemetry(t) {
+  const grid = document.getElementById('telem');
+  const fields = ['hr', 'oxy', 'wear', 'move', 'battery_vol', 'charge', 'signal_quality'];
+  grid.innerHTML = fields.map(k => `
+    <div class="telem-item"><div class="k">${k}</div><div class="v">${t[k] ?? '—'}</div></div>
+  `).join('');
+}
+
+async function refreshTelemetry() {
+  setStatus('telem-status', 'reading… (~6s)', true);
+  try {
+    const t = await api('/api/telemetry');
+    renderTelemetry(t);
+    setStatus('telem-status', 'updated ' + new Date().toLocaleTimeString(), true);
+  } catch (e) { setStatus('telem-status', e.message, false); }
+}
+
+async function refreshParams() {
+  setStatus('telem-status', 'reading full dump… (~10s)', true);
+  try {
+    const p = await api('/api/params');
+    setStatus('telem-status', `got ${p.params ? p.params.length : '?'} params (sw ${p.main_sw_version || '?'})`, true);
+    console.log('params dump', p);
+  } catch (e) { setStatus('telem-status', e.message, false); }
+}
+
+document.getElementById('brightness').addEventListener('input', e => {
+  document.getElementById('brightness-num').value = e.target.value;
+});
+document.getElementById('brightness-num').addEventListener('input', e => {
+  document.getElementById('brightness').value = e.target.value;
+});
+
+async function setBrightness() {
+  const brightness = parseInt(document.getElementById('brightness-num').value, 10);
+  const auto = document.getElementById('brightness-auto').checked ? 1 : 0;
+  setStatus('brightness-status', 'sending…', true);
+  try {
+    await api('/api/settings/brightness', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ brightness, brightness_auto: auto }) });
+    setStatus('brightness-status', 'applied', true);
+  } catch (e) { setStatus('brightness-status', e.message, false); }
+}
+
+async function setMovement() {
+  const move_threshold = parseInt(document.getElementById('move-threshold').value, 10);
+  setStatus('movement-status', 'sending…', true);
+  try {
+    await api('/api/settings/movement', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ move_threshold }) });
+    setStatus('movement-status', 'applied', true);
+  } catch (e) { setStatus('movement-status', e.message, false); }
+}
+
+async function setAlerts() {
+  const g = id => parseInt(document.getElementById(id).value, 10);
+  const payload = {
+    hr_advance_enable: document.getElementById('hr_advance_enable').checked ? 1 : 0,
+    oxy_advance_enable: document.getElementById('oxy_advance_enable').checked ? 1 : 0,
+    hr_warning_down: g('hr_warning_down'), hr_warning_up: g('hr_warning_up'),
+    hr_dangerous_down: g('hr_dangerous_down'), hr_dangerous_up: g('hr_dangerous_up'),
+    o2_warning_down: g('o2_warning_down'), o2_dangerous_down: g('o2_dangerous_down'),
+  };
+  setStatus('alerts-status', 'sending…', true);
+  try {
+    await api('/api/settings/alerts', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload) });
+    setStatus('alerts-status', 'applied', true);
+  } catch (e) { setStatus('alerts-status', e.message, false); }
+}
+
+refreshTelemetry();
+</script>
+</body>
+</html>

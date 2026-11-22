@@ -39,15 +39,24 @@ settings, with the official app completely closed throughout.
 - **Writing** a setting back to the base and having it take effect — verified
   by reading the changed value back afterward, not just by getting an ack
 
+- **A small self-hosted HTTP API + web UI** (`scripts/server.py` +
+  `scripts/web/`) for controlling the sock from a browser, with no app or
+  cloud involved — see "Self-hosted web UI" below.
+
 ## What's still in progress
 
-- Only one write command type (`cmd 3515`, base LED brightness) has been
-  exercised end-to-end so far. The same encoder generalizes directly to the
-  other known command types (movement threshold, HR/SpO2 alert thresholds) —
-  just needs doing.
+- Write commands `3515` (brightness), `3516` (movement threshold), and `3519`
+  (HR/SpO2 thresholds) are exercised end-to-end, including by the web UI.
+  `3546` (working mode) has a *confirmed mapping* but no captured subtype yet
+  — writing it is deliberately left unimplemented rather than guessed; see
+  `docs/protocol-findings.md`'s command catalog.
 - Pairing a brand-new base from scratch, bypassing the official app/phone
   setup flow entirely (or building a minimal web-based pairing flow) — not
   yet investigated.
+- A separate class of settings (voice prompts, notifications, device name,
+  time/timezone, volume) never touches this protocol at all — they're
+  cloud-account-stored and go over `care-app.eufylife.com`'s still-unbroken
+  ECIES scheme. Out of scope for this repo; see `docs/findings.md`.
 
 ## Requirements
 
@@ -60,6 +69,52 @@ settings, with the official app completely closed throughout.
   base, *only* if you need to (re-)extract the AES key for your own base —
   see `docs/protocol-findings.md` for how. If you already have the key for
   your base, root isn't needed for day-to-day use of the standalone client.
+
+## Self-hosted web UI
+
+`scripts/server.py` is a small HTTP API (Python stdlib only, no `pip
+install`) built directly on the same protocol as `standalone_client.py`,
+plus a static web UI (`scripts/web/index.html`) for day-to-day control from
+a browser — the point being to replace the official app/cloud for this
+device entirely, not just to script it.
+
+```
+cd scripts
+python3 server.py --host 127.0.0.1 --port 8420
+```
+
+It must run on something that's on the same LAN as the base (e.g. your home
+server), **and a firewall rule allowing inbound UDP from the base's IP is
+required** if that host runs a default-deny firewall — the base replies from
+a different ephemeral port than the one you send to, which defeats normal
+connection tracking:
+
+```
+sudo ufw allow from <base's LAN IP> comment 'eufy base PPCS replies'
+```
+
+Expose it to yourself remotely via your own reverse proxy / subdomain with
+auth in front — this process only speaks plain HTTP and expects a proxy (or
+`EUFY_API_TOKEN` + `Authorization: Bearer <token>`, as a fallback) in front
+of it for anything beyond localhost/LAN access.
+
+Each API call is a fresh ~1-6s session (discovery → handshake → action →
+listen briefly → close), not a persistent connection — simple, and matches
+how the protocol was already proven to work.
+
+Endpoints: `GET /api/telemetry`, `GET /api/params`, `POST
+/api/settings/{brightness,movement,alerts}`. See `scripts/eufy_client.py`
+for the request bodies (same field names as the command catalog).
+
+### Does the base need the internet at all?
+
+Evidence from this project says no, for everything this UI does: the base's
+local-protocol trust gating is by source IP, not by any active cloud
+session, and LAN control (telemetry + settings writes) kept working in
+every test here even while the base's own internet path was cut off. Firmly
+block it at your router if you want to; just don't assume that's been
+stress-tested over days, only minutes, and note OTA updates and the
+cloud-only settings above would stop working too.
 
 ## Repo layout
 
