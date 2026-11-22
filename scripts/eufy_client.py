@@ -188,7 +188,16 @@ class EufyBaseSession:
         end = time.time() + duration
         next_status = time.time()
         status_msgid = 0
-        write_sent = False
+        # The write is plain UDP with no per-packet ack/retry of its own
+        # (unlike every other step in the handshake -- announce echoed 4x,
+        # ping sent up to 10x, version hello sent 4x) -- a fire-and-forget
+        # single send is indistinguishable from "silently dropped on a
+        # lossy Wi-Fi link" from the caller's side. Resend it a few times
+        # on the SAME msgid (the base's dedup is per msgid, so repeats are
+        # safe/idempotent, not re-applied N times) to match that pattern.
+        cmd_pkt = None
+        cmd_msgid = None
+        write_resends_left = 4
         write_at = time.time() + write_after
 
         bufs = {}
@@ -203,11 +212,14 @@ class EufyBaseSession:
                 s.sendto(bytes(pkt), base_addr)
                 status_msgid += 1
                 next_status = time.time() + 0.3
-            if write_cmd is not None and not write_sent and time.time() >= write_at:
-                cmd_pkt = build_command_packet(write_cmd, status_msgid % 65536)
+            if write_cmd is not None and write_resends_left > 0 and time.time() >= write_at:
+                if cmd_pkt is None:
+                    cmd_msgid = status_msgid % 65536
+                    cmd_pkt = build_command_packet(write_cmd, cmd_msgid)
+                    status_msgid += 1
                 s.sendto(cmd_pkt, base_addr)
-                status_msgid += 1
-                write_sent = True
+                write_resends_left -= 1
+                write_at = time.time() + 0.4
 
             try:
                 data, addr = s.recvfrom(4096)
@@ -272,7 +284,7 @@ def read_params(duration: float = 10.0) -> dict:
     return res['params']
 
 
-def write_setting(cmd: int, payload: dict, duration: float = 6.0) -> dict:
+def write_setting(cmd: int, payload: dict, duration: float = 8.0) -> dict:
     """Send a write command and listen for a bit afterward so the caller
     can read back the new state (bulk dump / telemetry) to confirm it
     actually took effect, per the project's own stated best practice:

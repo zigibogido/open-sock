@@ -159,21 +159,33 @@ document.getElementById('brightness-num').addEventListener('input', e => {
 async function setBrightness() {
   const brightness = parseInt(document.getElementById('brightness-num').value, 10);
   const auto = document.getElementById('brightness-auto').checked ? 1 : 0;
-  setStatus('brightness-status', 'sending…', true);
+  setStatus('brightness-status', 'sending… (~8s, retries a few times over a lossy link)', true);
   try {
-    await api('/api/settings/brightness', { method: 'POST', headers: {'Content-Type':'application/json'},
+    const data = await api('/api/settings/brightness', { method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ brightness, brightness_auto: auto }) });
-    setStatus('brightness-status', 'applied', true);
+    const applied = (data.params || []).find(p => p.param_type === 3515);
+    if (applied && parseInt(applied.param_value, 10) === brightness) {
+      setStatus('brightness-status', `confirmed: base now reports ${applied.param_value}`, true);
+    } else {
+      setStatus('brightness-status',
+        `sent, but readback shows ${applied ? applied.param_value : 'unknown'} (wanted ${brightness}) — try again`, false);
+    }
   } catch (e) { setStatus('brightness-status', e.message, false); }
 }
 
 async function setMovement() {
   const move_threshold = parseInt(document.getElementById('move-threshold').value, 10);
-  setStatus('movement-status', 'sending…', true);
+  setStatus('movement-status', 'sending… (~8s, retries a few times over a lossy link)', true);
   try {
-    await api('/api/settings/movement', { method: 'POST', headers: {'Content-Type':'application/json'},
+    const data = await api('/api/settings/movement', { method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ move_threshold }) });
-    setStatus('movement-status', 'applied', true);
+    // param_type 3520 is the wire identity of the threshold value (not 3516 -- see protocol-findings.md).
+    const applied = (data.params || []).find(p => p.param_type === 3520);
+    if (applied) {
+      setStatus('movement-status', `confirmed: base now reports ${applied.param_value}`, true);
+    } else {
+      setStatus('movement-status', 'sent, but could not confirm readback — try again', false);
+    }
   } catch (e) { setStatus('movement-status', e.message, false); }
 }
 
@@ -186,11 +198,13 @@ async function setAlerts() {
     hr_dangerous_down: g('hr_dangerous_down'), hr_dangerous_up: g('hr_dangerous_up'),
     o2_warning_down: g('o2_warning_down'), o2_dangerous_down: g('o2_dangerous_down'),
   };
-  setStatus('alerts-status', 'sending…', true);
+  setStatus('alerts-status', 'sending… (~8s, retries a few times over a lossy link)', true);
   try {
-    await api('/api/settings/alerts', { method: 'POST', headers: {'Content-Type':'application/json'},
+    const data = await api('/api/settings/alerts', { method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(payload) });
-    setStatus('alerts-status', 'applied', true);
+    // param_type 3519 is a packed string, not these individual field names -- show it raw for comparison.
+    const applied = (data.params || []).find(p => p.param_type === 3519);
+    setStatus('alerts-status', applied ? `confirmed: base now reports "${applied.param_value}"` : 'sent, but could not confirm readback — try again', !!applied);
   } catch (e) { setStatus('alerts-status', e.message, false); }
 }
 
