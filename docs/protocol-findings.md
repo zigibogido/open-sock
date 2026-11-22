@@ -149,7 +149,13 @@ AES-128-ECB, no IV, used directly on raw bytes with no KDF:
   `REDACTED-AES-KEY` for base serial `REDACTED-SERIAL`. The full 16-ASCII-byte
   string is used as-is as the AES-128-ECB key (no truncation, no hashing).
   This value is stable across app relaunches (deterministic per base, not
-  session-random).
+  session-random) — and, confirmed since, across a full factory reset and
+  fresh re-pair of the same physical base too (identical key extracted
+  before and after). That rules out the `<6 digits>-M` part being
+  per-pairing-session random, but **doesn't yet distinguish "deterministic
+  function of this device's identity" from "a constant shared by every base
+  of this model"** — settling that needs the same extraction done against a
+  second, different physical base.
 - One quirk found while building a standalone client: in at least one test
   session, the base sent some larger (channel 2) content **unencrypted** on
   the wire, apparently as a compatibility fallback when it doesn't recognize
@@ -204,7 +210,12 @@ authentication/encryption scheme, and not something this document covers.
 
 ## Reproducing this from scratch
 
-1. Root the phone (Magisk) so you can read `logcat` and run a UDP capture.
+1. **No root needed.** Confirmed on an unrooted phone: `adb logcat -d |
+   grep -iE 'keyvalue=|aes test password='` after opening the app once
+   (post-pairing) finds the key directly. (Root was used in this project's
+   earlier sessions for unrelated Frida/anti-tamper work, and it was
+   wrongly assumed to be a requirement for this specific step too — it
+   isn't; the `shell` user's default `READ_LOGS` access is enough.)
 2. Open the Eufy app once with `logcat` running and grep for a line
    containing the base's serial and a `-M`-suffixed value (search for
    `keyvalue=` or `key=`) — that string is the AES-128-ECB key for that base.

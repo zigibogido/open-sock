@@ -65,10 +65,11 @@ settings, with the official app completely closed throughout.
 - A computer or Android device on the same LAN as the base.
 - Python 3 (standard library only — no `pip install` needed) to run
   `scripts/standalone_client.py`.
-- Root access (e.g. Magisk) on an Android device that's been paired with the
-  base, *only* if you need to (re-)extract the AES key for your own base —
-  see `docs/protocol-findings.md` for how. If you already have the key for
-  your base, root isn't needed for day-to-day use of the standalone client.
+- **No root needed, even to extract the AES key** — confirmed with a plain
+  `adb logcat -d` on an unrooted phone after a factory reset + fresh pairing
+  (root was used in earlier sessions for unrelated Frida work and the key
+  extraction was mistakenly assumed to need it too). See
+  `docs/protocol-findings.md` for the exact command.
 
 ## Self-hosted web UI
 
