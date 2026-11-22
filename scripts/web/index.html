@@ -43,6 +43,20 @@
   .telem-item .k { font-size: 0.72rem; color: var(--muted); }
   .telem-item .v { font-size: 1.05rem; font-weight: 600; }
   .checkbox-row { display: flex; align-items: center; gap: 8px; }
+  .card.settings-card { position: relative; transition: opacity 0.2s; }
+  .card.settings-card.loading { opacity: 0.45; pointer-events: none; }
+  .card.settings-card.loading::after {
+    content: 'loading current value…';
+    position: absolute; top: 14px; right: 16px;
+    font-size: 0.75rem; color: var(--accent);
+  }
+  .card.settings-card.load-failed {
+    border-color: var(--err);
+  }
+  .card.settings-card.load-failed::before {
+    content: '⚠ showing a placeholder, not the base\'s real value — reload to retry';
+    display: block; font-size: 0.75rem; color: var(--err); margin-bottom: 10px;
+  }
 </style>
 </head>
 <body>
@@ -59,7 +73,7 @@
     <div id="telem-status" class="status"></div>
   </div>
 
-  <div class="card">
+  <div class="card settings-card loading" id="card-brightness">
     <h2>Brightness</h2>
     <div class="row">
       <label for="brightness">Level (1-11)</label>
@@ -78,7 +92,7 @@
     <div id="brightness-status" class="status"></div>
   </div>
 
-  <div class="card">
+  <div class="card settings-card loading" id="card-movement">
     <h2>Movement alert threshold</h2>
     <div class="row">
       <label for="move-threshold">Threshold</label>
@@ -90,7 +104,7 @@
     <div id="movement-status" class="status"></div>
   </div>
 
-  <div class="card">
+  <div class="card settings-card loading" id="card-alerts">
     <h2>Heart rate / SpO2 alert thresholds</h2>
     <div class="row"><label>HR warning (low/high)</label>
       <input type="number" id="hr_warning_down" value="80"><input type="number" id="hr_warning_up" value="230"></div>
@@ -215,6 +229,16 @@ function paramValue(params, type) {
   return p ? p.param_value : null;
 }
 
+function markLoaded(cardId) {
+  const el = document.getElementById(cardId);
+  el.classList.remove('loading', 'load-failed');
+}
+function markFailed(cardId) {
+  const el = document.getElementById(cardId);
+  el.classList.remove('loading');
+  el.classList.add('load-failed');
+}
+
 async function loadCurrentSettings() {
   setStatus('telem-status', 'loading current settings… (~10s)', true);
   try {
@@ -225,12 +249,18 @@ async function loadCurrentSettings() {
     if (brightness !== null) {
       document.getElementById('brightness').value = brightness;
       document.getElementById('brightness-num').value = brightness;
+      markLoaded('card-brightness');
+    } else {
+      markFailed('card-brightness');
     }
 
     // param_type 3520, not 3516, is the wire identity of this value -- see docs/protocol-findings.md.
     const moveThreshold = paramValue(params, 3520);
     if (moveThreshold !== null) {
       document.getElementById('move-threshold').value = moveThreshold;
+      markLoaded('card-movement');
+    } else {
+      markFailed('card-movement');
     }
 
     // param_type 3519 is a packed string: hr_warning_up-hr_dangerous_up-hr_warning_down-
@@ -249,12 +279,18 @@ async function loadCurrentSettings() {
       document.getElementById('o2_dangerous_down').value = o2DangerDown;
       document.getElementById('hr_advance_enable').checked = !!hrEnable;
       document.getElementById('oxy_advance_enable').checked = !!oxyEnable;
+      markLoaded('card-alerts');
+    } else {
+      markFailed('card-alerts');
     }
     // Note: there's no confirmed readback mapping yet for brightness_auto specifically,
     // so that checkbox is left as-is rather than guessed from an unconfirmed param.
 
     setStatus('telem-status', 'loaded current settings ' + new Date().toLocaleTimeString(), true);
   } catch (e) {
+    markFailed('card-brightness');
+    markFailed('card-movement');
+    markFailed('card-alerts');
     setStatus('telem-status', 'could not load current settings: ' + e.message, false);
   }
 }
