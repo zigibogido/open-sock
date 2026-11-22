@@ -51,17 +51,19 @@
   .telem-item .k { font-size: 0.72rem; color: var(--muted); }
   .telem-item .v { font-size: 1.05rem; font-weight: 600; }
   .checkbox-row { display: flex; align-items: center; gap: 8px; }
-  .card.settings-card { position: relative; transition: opacity 0.2s; }
-  .card.settings-card.loading { opacity: 0.45; pointer-events: none; }
-  .card.settings-card.loading::after {
+  .settings-card { position: relative; transition: opacity 0.2s; }
+  .settings-card.loading { opacity: 0.45; pointer-events: none; }
+  .settings-card.loading::after {
     content: 'loading current value…';
-    position: absolute; top: 14px; right: 16px;
+    position: absolute; top: 0; right: 0;
     font-size: 0.75rem; color: var(--accent);
   }
-  .card.settings-card.load-failed {
+  .card.settings-card.loading::after { top: 14px; right: 16px; }
+  .settings-card.load-failed {
     border-color: var(--err);
   }
-  .card.settings-card.load-failed::before {
+  .subsection.load-failed { border-left: 2px solid var(--err); padding-left: 10px; margin-left: -12px; }
+  .settings-card.load-failed::before {
     content: '⚠ showing a placeholder, not the base\'s real value — reload to retry';
     display: block; font-size: 0.75rem; color: var(--err); margin-bottom: 10px;
   }
@@ -110,6 +112,12 @@
     gap: 14px; align-items: start;
   }
   .settings-grid .card { margin-bottom: 0; }
+
+  /* Sub-panels sharing one card (Brightness / Heart rate alert / Working
+     mode) -- a hairline divider between them, no divider before the first. */
+  .subsection { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--border); }
+  .subsection:first-child { padding-top: 0; margin-top: 0; border-top: none; }
+  .subsection h2 { font-size: 0.95rem; }
 </style>
 </head>
 <body>
@@ -147,58 +155,60 @@
     <div id="history-table-wrap" style="display:none; max-height: 260px; overflow:auto;"></div>
   </div>
 
-  <div class="card settings-card loading" id="card-brightness">
-    <h2>Brightness</h2>
-    <div class="row">
-      <label for="brightness">Level (1-11)</label>
-      <input type="range" id="brightness" min="1" max="11" value="5">
-      <input type="number" id="brightness-num" min="1" max="11" value="5">
+  <div class="card">
+    <div class="subsection settings-card loading" id="card-brightness">
+      <h2>Brightness</h2>
+      <div class="row">
+        <label for="brightness">Level (1-11)</label>
+        <input type="range" id="brightness" min="1" max="11" value="5">
+        <input type="number" id="brightness-num" min="1" max="11" value="5">
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="brightness-auto">
+        <label for="brightness-auto" style="min-width:auto;">Auto brightness</label>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button onclick="setBrightness()">Apply</button>
+      </div>
+      <div id="brightness-status" class="status"></div>
     </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="brightness-auto">
-      <label for="brightness-auto" style="min-width:auto;">Auto brightness</label>
-    </div>
-    <div class="row" style="margin-top:10px;">
-      <button onclick="setBrightness()">Apply</button>
-    </div>
-    <div id="brightness-status" class="status"></div>
-  </div>
 
-  <div class="card settings-card loading" id="card-alerts">
-    <h2>Heart rate alert</h2>
-    <div class="row"><label>Low / high (bpm)</label>
-      <select id="hr_warning_down">
-        <option value="40">40</option><option value="50">50</option><option value="60">60</option>
-        <option value="70">70</option><option value="80">80</option><option value="90">90</option>
-        <option value="100">100</option>
-      </select>
-      <select id="hr_warning_up">
-        <option value="120">120</option><option value="130">130</option><option value="140">140</option>
-        <option value="150">150</option><option value="160">160</option><option value="170">170</option>
-        <option value="180">180</option><option value="190">190</option><option value="200">200</option>
-        <option value="210">210</option><option value="220">220</option><option value="230">230</option>
-        <option value="240">240</option><option value="250">250</option>
-      </select>
+    <div class="subsection settings-card loading" id="card-alerts">
+      <h2>Heart rate alert</h2>
+      <div class="row"><label>Low / high (bpm)</label>
+        <select id="hr_warning_down">
+          <option value="40">40</option><option value="50">50</option><option value="60">60</option>
+          <option value="70">70</option><option value="80">80</option><option value="90">90</option>
+          <option value="100">100</option>
+        </select>
+        <select id="hr_warning_up">
+          <option value="120">120</option><option value="130">130</option><option value="140">140</option>
+          <option value="150">150</option><option value="160">160</option><option value="170">170</option>
+          <option value="180">180</option><option value="190">190</option><option value="200">200</option>
+          <option value="210">210</option><option value="220">220</option><option value="230">230</option>
+          <option value="240">240</option><option value="250">250</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button onclick="setAlerts()">Apply</button>
+      </div>
+      <div id="alerts-status" class="status"></div>
     </div>
-    <div class="row" style="margin-top:10px;">
-      <button onclick="setAlerts()">Apply</button>
-    </div>
-    <div id="alerts-status" class="status"></div>
-  </div>
 
-  <div class="card settings-card loading" id="card-mode">
-    <h2>Working mode</h2>
-    <div class="row">
-      <label for="working-mode">Mode</label>
-      <select id="working-mode">
-        <option value="0">Standard</option>
-        <option value="1">Mute</option>
-      </select>
+    <div class="subsection settings-card loading" id="card-mode">
+      <h2>Working mode</h2>
+      <div class="row">
+        <label for="working-mode">Mode</label>
+        <select id="working-mode">
+          <option value="0">Standard</option>
+          <option value="1">Mute</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button onclick="setMode()">Apply</button>
+      </div>
+      <div id="mode-status" class="status"></div>
     </div>
-    <div class="row" style="margin-top:10px;">
-      <button onclick="setMode()">Apply</button>
-    </div>
-    <div id="mode-status" class="status"></div>
   </div>
 
   <div class="card settings-card loading" id="card-movement" style="grid-column: 1 / -1;">
