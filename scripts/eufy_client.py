@@ -17,7 +17,7 @@ import pure_aes
 
 KEY = b'REDACTED-AES-KEY'
 BROADCAST_PORT = 32108
-BASE_IP = '192.168.7.3'
+BASE_IP = '10.10.10.10'  # Deepnest's DHCP reservation for the base's MAC
 ACCOUNT_ID = 'REDACTED-ACCOUNT-ID'
 
 # 12-byte "subtype" placed right after the XZYH tag -- specific to each cmd,
