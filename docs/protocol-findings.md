@@ -175,7 +175,7 @@ each new command before testing it; known-good values are in
 | `cmd` | Direction | Status | Payload | Notes |
 |---|---|---|---|---|
 | 3503 | base→phone | read (periodic) | `sn, rssi, wear, wear_val, wear_threshold, hr, oxy, move, move_val, charge, battery_vol, signal_quality, cur_sleep_start/end/duration, time` | Live sock telemetry, the sock's own serial (`T8340...`) appears here for the first time — otherwise invisible to the phone. |
-| 3515 | phone→base | **write verified** | `brightness:0-11, brightness_auto:0\|1` | Base status LED. |
+| 3515 | phone→base | **write verified** | `brightness:1-11, brightness_auto:0\|1` | Base status LED. **`0` is not a valid value** — confirmed by repeated testing (4/4) that it's silently remapped by the base's firmware to a built-in default (`9`), not applied as "off" and not rejected outright either. The packet is still acked; only the readback reveals the remap. Use `1` for "lowest", not `0`. |
 | 3516 | phone→base | **write verified** | `move_threshold, tones_pushes` | Movement alert threshold; `tones_pushes` doubles as a periodic heartbeat/notification counter. Wire identity of the threshold value is actually `param_type 3520` in the bulk dump below — `param_type 3516` is `tones_pushes` instead; don't assume a command's JSON field name matches the closest-looking `param_type`. |
 | 3519 | phone→base | **write verified** | `hr_advance_enable, hr_dangerous_down/up, hr_warning_down/up(+_real), o2_dangerous_down, o2_warning_down(+_real), oxy_advance_enable` | HR/SpO2 safety-alert thresholds. UI range for warning thresholds is roughly 40-250 bpm. |
 | 3546 | phone→base | mapping confirmed | `mode:0\|1` | Working Mode: `0`=Standard, `1`=Mute. |

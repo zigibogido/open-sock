@@ -62,10 +62,12 @@
   <div class="card">
     <h2>Brightness</h2>
     <div class="row">
-      <label for="brightness">Level (0-11)</label>
-      <input type="range" id="brightness" min="0" max="11" value="5">
-      <input type="number" id="brightness-num" min="0" max="11" value="5">
+      <label for="brightness">Level (1-11)</label>
+      <input type="range" id="brightness" min="1" max="11" value="5">
+      <input type="number" id="brightness-num" min="1" max="11" value="5">
     </div>
+    <div class="sub" style="margin:-4px 0 10px;">0 is not a valid value here &mdash; the base's firmware silently
+      remaps it to a built-in default instead of treating it as "off" (confirmed by testing).</div>
     <div class="checkbox-row">
       <input type="checkbox" id="brightness-auto">
       <label for="brightness-auto" style="min-width:auto;">Auto brightness</label>
