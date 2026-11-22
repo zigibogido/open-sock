@@ -159,11 +159,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send_json(400, {'ok': False, 'error': f'missing fields: {missing}'})
                 return self._run(lambda: eufy_client.write_setting(3519, body))
             if self.path == '/api/settings/mode':
-                return self._send_json(501, {
-                    'ok': False,
-                    'error': 'working-mode (cmd 3546) write not implemented: no subtype '
-                             'captured yet from a real packet -- see docs/protocol-findings.md',
-                })
+                payload = {'mode': int(body['mode'])}
+                return self._run(lambda: eufy_client.write_setting(3546, payload))
             return self._send_json(404, {'ok': False, 'error': 'unknown endpoint'})
         except (KeyError, ValueError) as e:
             return self._send_json(400, {'ok': False, 'error': f'bad request body: {e}'})

@@ -45,11 +45,9 @@ settings, with the official app completely closed throughout.
 
 ## What's still in progress
 
-- Write commands `3515` (brightness), `3516` (movement threshold), and `3519`
-  (HR/SpO2 thresholds) are exercised end-to-end, including by the web UI.
-  `3546` (working mode) has a *confirmed mapping* but no captured subtype yet
-  — writing it is deliberately left unimplemented rather than guessed; see
-  `docs/protocol-findings.md`'s command catalog.
+- Write commands `3515` (brightness), `3516` (movement threshold), `3519`
+  (HR/SpO2 thresholds), and `3546` (working mode) are all exercised
+  end-to-end, including by the web UI.
 - Pairing a brand-new base from scratch, bypassing the official app/phone
   setup flow entirely (or building a minimal web-based pairing flow) — not
   yet investigated.

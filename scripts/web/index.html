@@ -195,6 +195,21 @@
     <div id="alerts-status" class="status"></div>
   </div>
 
+  <div class="card settings-card loading" id="card-mode">
+    <h2>Working mode</h2>
+    <div class="row">
+      <label for="working-mode">Mode</label>
+      <select id="working-mode">
+        <option value="0">Standard</option>
+        <option value="1">Mute</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button onclick="setMode()">Apply</button>
+    </div>
+    <div id="mode-status" class="status"></div>
+  </div>
+
 <script>
 const AUTH_TOKEN = localStorage.getItem('eufy_api_token') || '';
 
@@ -297,6 +312,21 @@ async function setAlerts() {
   } catch (e) { setStatus('alerts-status', e.message, false); }
 }
 
+async function setMode() {
+  const mode = parseInt(document.getElementById('working-mode').value, 10);
+  setStatus('mode-status', 'sending… (~8s, retries a few times over a lossy link)', true);
+  try {
+    const data = await api('/api/settings/mode', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode }) });
+    const applied = (data.params || []).find(p => p.param_type === 3546);
+    if (applied && parseInt(applied.param_value, 10) === mode) {
+      setStatus('mode-status', `confirmed: base now reports ${applied.param_value === '1' ? 'Mute' : 'Standard'}`, true);
+    } else {
+      setStatus('mode-status', `sent, but readback shows ${applied ? applied.param_value : 'unknown'} (wanted ${mode}) — try again`, false);
+    }
+  } catch (e) { setStatus('mode-status', e.message, false); }
+}
+
 function paramValue(params, type) {
   const p = params.find(x => x.param_type === type);
   return p ? p.param_value : null;
@@ -356,6 +386,14 @@ async function loadCurrentSettings() {
     } else {
       markFailed('card-alerts');
     }
+
+    const mode = paramValue(params, 3546);
+    if (mode !== null) {
+      document.getElementById('working-mode').value = mode;
+      markLoaded('card-mode');
+    } else {
+      markFailed('card-mode');
+    }
     // Note: there's no confirmed readback mapping yet for brightness_auto specifically,
     // so that checkbox is left as-is rather than guessed from an unconfirmed param.
 
@@ -364,6 +402,7 @@ async function loadCurrentSettings() {
     markFailed('card-brightness');
     markFailed('card-movement');
     markFailed('card-alerts');
+    markFailed('card-mode');
     setStatus('telem-status', 'could not load current settings: ' + e.message, false);
   }
 }
