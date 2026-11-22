@@ -43,6 +43,102 @@ settings, with the official app completely closed throughout.
   `scripts/web/`) for controlling the sock from a browser, with no app or
   cloud involved — see "Self-hosted web UI" below.
 
+## Project goals
+
+**Done:** full app/cloud-independent read + write over the local LAN protocol
+(telemetry, brightness, movement threshold, HR/SpO2 thresholds, working
+mode), a self-hosted HTTP API + web UI with history charts, and confirmation
+(via a real isolated-network experiment) that day-to-day LAN control doesn't
+need the base to reach the internet at all.
+
+**Next priorities, in rough order, each with where a future session should
+start:**
+
+1. **Pair a base without ever touching Eufy's cloud.** The blocker isn't the
+   BLE Wi-Fi provisioning step (already understood, see the BLE pairing
+   capture below) — it's that the base won't commit its Wi-Fi credentials to
+   flash until cloud account-binding (real TLS to `care-app.eufylife.com`,
+   cert the device trusts + Eufy's real backend) completes. Confirmed by a
+   real isolated-network pairing attempt (`docs/findings.md`, "Deepnest
+   pairing experiment") — see that entry for the full story, including a
+   **new, not-yet-explored lead**: a separate plaintext UDP check-in
+   (`3.141.175.104:8006`, the base's serial sent every 10s pre-pairing) that's
+   a much more tractable target than the TLS layer. **Start there**: capture
+   that channel's *reply* during a real (internet-connected) pairing — if the
+   base's "am I registered" state is satisfied by something on this channel
+   rather than requiring the full TLS flow to also succeed, that's a far
+   smaller thing to replicate than faking Eufy's real cloud. If that's a dead
+   end, the next escalation is the base's own UART pads (TXD/RXD/3V3/GND near
+   the SPI flash, still never used) — firmware-level access to see the actual
+   pairing state machine, rather than guessing from the network side.
+2. **Unlock the voice-prompt setting locally** (the one cloud-only setting
+   that's actually device-bound, not just app-UI state — see `docs/findings.md`
+   for why the others in that original group are believed to be phone-local
+   only). This runs into the same ECIES wall as the unfinished cloud-API
+   track: the scheme itself is fully reverse-engineered, only the account's
+   EC private key is missing, wrapped at rest in `shared_preference_security.xml`.
+   **Start with the cheap thing, not resuming the Frida fight**: a fresh
+   `adb logcat -d | grep -iE 'ecdh|private|eccDecrypt|GetPrivateKey'` on a
+   *plain unrooted* phone while the app does a cloud-settings action —
+   directly inspired by this project's repeated pattern of the vendor's app
+   leaking exactly this kind of material to `logcat` for free (this is
+   literally how the local AES key and, separately, this project's biggest
+   local-protocol wins were found). If that's empty, the next step is static,
+   not dynamic: the app's DEX has already been recovered once (via a
+   `dalvik-DEX` memory dump, see `docs/findings.md`) — search it for the
+   `ecdh-key<email>` unwrap routine to determine whether it's software
+   (crackable) or Android-Keystore/hardware-backed (isn't), before spending
+   more time on live-device work either way.
+3. **Local alerting matching the official app's notifications** (HR/SpO2 out
+   of range, sock not worn, battery low) — lower priority, no new reverse
+   engineering needed, just code: every notification type maps onto fields
+   already fully decoded and already flowing through `history.py`. See
+   "Future: local alerting" below for the exact condition each one needs.
+
+### Future: local alerting (not yet built)
+
+Nothing in this project has found evidence the base sends discrete alert
+*events* — it only streams continuous raw telemetry. Every notification the
+official app shows appears to be computed downstream (app-side when open,
+cloud-side for push when it's closed) from fields this project already fully
+decodes. Conditions for a future `history.py` addition, by confidence level:
+
+**HR out of range** (solid):
+```
+telemetry.hr > 0                                    # 0 = "no reading," not a real value
+  AND (hr >= thresholds.hr_warning_up OR hr <= thresholds.hr_warning_down)  → warning
+  AND (hr >= thresholds.hr_dangerous_up OR hr <= thresholds.hr_dangerous_down) → danger
+# thresholds from param_type 3519's packed string (already parsed by the web UI);
+# gate on hr_advance_enable, same as the app's own toggle.
+```
+
+**SpO2 out of range** (solid, same source):
+```
+telemetry.oxy > 0
+  AND oxy <= thresholds.o2_warning_down    → warning
+  AND oxy <= thresholds.o2_dangerous_down  → danger
+# gated on oxy_advance_enable.
+```
+
+**Sock not worn correctly** (medium confidence): the raw `wear`/`wear_val`/
+`wear_threshold` fields clearly carry more detail (values `1`, `16`, `18`
+seen in different states, exact bitmask not decoded), but across every
+sample logged so far, `hr == 0 AND oxy == 0` reliably means "not worn well
+enough for a reading" — the same signal the history charts already use to
+treat `0` as missing rather than a real zero. That's the trustworthy
+condition; don't build this on `wear` directly without a dedicated capture
+correlating specific values to known worn/unworn states first.
+
+**Battery low / shutting down** (real gap): no decoded threshold parameter
+exists anywhere in the command catalog for this. `telemetry.battery_vol <=
+20` (or whatever number) would be an arbitrary pick, not something sourced
+from the device — the app's own actual cutoff isn't known.
+
+**Sock disconnected** (not implementable yet): no confirmed signal at all.
+The only lead is the still-undecoded `rssi_list` message (BLE signal
+strength base↔sock, both directions) — needs a dedicated capture (toggle the
+sock off/on the base, watch what changes) before this has a real condition.
+
 ## What's still in progress
 
 - Write commands `3515` (brightness), `3516` (movement threshold), `3519`
@@ -213,7 +309,7 @@ f1 d0 <total_len:u16be> d1 00 <msgid:u16be> 58 5a 59 48 <12-byte subtype> <AES-1
 | 3515 | phone → base | **write verified** | `{"brightness":0-11,"brightness_auto":0\|1}` | Base status LED. `brightness_auto:1` = auto mode (ignores explicit `brightness`). |
 | 3516 | phone → base | **write verified** | `{"move_threshold":N,"tones_pushes":N}` | Movement alert threshold; also sent periodically as a heartbeat with just `tones_pushes` incrementing. |
 | 3519 | phone → base | **write verified** | `{"hr_advance_enable","hr_dangerous_down/up","hr_warning_down/up","hr_warning_down_real/up_real","o2_dangerous_down","o2_warning_down","o2_warning_down_real","oxy_advance_enable"}` | HR/SpO2 safety-alert thresholds. UI range for warning thresholds is roughly 40-250 bpm. Test with a small tweak, not by disabling (`*_advance_enable:0`). |
-| 3546 | phone → base | mapping confirmed, write not yet tested | `{"mode":0\|1}` | Working Mode: `0` = Standard, `1` = Mute. |
+| 3546 | phone → base | **write verified** | `{"mode":0\|1}` | Working Mode: `0` = Standard, `1` = Mute. |
 | 3509 | phone → base | read only so far | `{"bindStatus","birthdate","child_id","gender","height","name","race","weight"}` | Child/baby profile (the "Me → Child profile" screen). Contains personal info by design. |
 | 1201 | phone → base | read only, purpose unclear | `{"time_out":N,"user_name":"..."}` | Seen fired automatically, not tied to a specific UI action; may be account/session-related rather than a device setting. |
 | — (bulk params dump) | base → phone | read only | `{"params":[{"dev_type","param_type","param_value"}, ...],"main_sw_version","sec_sw_version"}` | Fragmented across multiple ~1032-byte packets + a short terminator. 77 params observed. `param_type 3519` is the packed form of the `cmd 3519` thresholds; `param_type 1176` is the base's LAN IP; `param_type 1296` is the region code. Use this to verify a write actually took effect — read the relevant `param_type` back rather than trusting the ack alone. |
