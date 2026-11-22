@@ -17,3 +17,4 @@ secrets/
 
 __pycache__/
 *.pyc
+scripts/eufy_history.sqlite3*

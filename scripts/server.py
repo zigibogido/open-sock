@@ -25,9 +25,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import eufy_client
+import history
 
 WEB_DIR = Path(__file__).parent / 'web'
 API_TOKEN = os.environ.get('EUFY_API_TOKEN')
+HISTORY_INTERVAL_SECONDS = float(os.environ.get('EUFY_HISTORY_INTERVAL', 90))
 
 # serialize all base access -- the protocol is a single stateful UDP
 # session; two API calls racing each other would both try to discover/
@@ -120,6 +122,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._run(lambda: eufy_client.read_params(), cache_key='params')
         if self.path == '/api/status':
             return self._send_json(200, {'ok': True, 'cache': _cache})
+        if self.path.startswith('/api/history'):
+            from urllib.parse import urlsplit, parse_qs
+            qs = parse_qs(urlsplit(self.path).query)
+            try:
+                minutes = float(qs.get('minutes', ['360'])[0])
+            except ValueError:
+                return self._send_json(400, {'ok': False, 'error': 'minutes must be a number'})
+            minutes = max(1.0, min(minutes, 60 * 24 * 30))  # cap at 30 days
+            samples = history.query_history(minutes)
+            return self._send_json(200, {'ok': True, 'data': {'minutes': minutes, 'samples': samples}})
         return self._send_json(404, {'ok': False, 'error': 'unknown endpoint'})
 
     def _handle_api_post(self, body: dict):
@@ -181,6 +193,9 @@ def main():
         print('[!] EUFY_API_TOKEN not set -- no auth enforced. '
               'Fine behind an authenticating reverse proxy, not fine exposed directly.',
               file=sys.stderr)
+
+    history.start_sampler(HISTORY_INTERVAL_SECONDS, _lock)
+    print(f'[*] history sampler running every {HISTORY_INTERVAL_SECONDS:.0f}s -> {history.DB_PATH}')
 
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f'[*] listening on http://{args.host}:{args.port}')

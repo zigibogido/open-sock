@@ -102,9 +102,21 @@ Each API call is a fresh ~1-6s session (discovery → handshake → action →
 listen briefly → close), not a persistent connection — simple, and matches
 how the protocol was already proven to work.
 
-Endpoints: `GET /api/telemetry`, `GET /api/params`, `POST
-/api/settings/{brightness,movement,alerts}`. See `scripts/eufy_client.py`
-for the request bodies (same field names as the command catalog).
+Endpoints: `GET /api/telemetry`, `GET /api/params`, `GET
+/api/history?minutes=N`, `POST /api/settings/{brightness,movement,alerts}`.
+See `scripts/eufy_client.py` for the request bodies (same field names as the
+command catalog).
+
+### History (stats over time, like the official app's dashboard)
+
+`scripts/history.py` runs a background sampler (every `EUFY_HISTORY_INTERVAL`
+seconds, default 90) that takes one telemetry reading and logs it to a local
+SQLite file (`scripts/eufy_history.sqlite3`, gitignored — it's runtime data,
+not source). The web UI charts HR, SpO2, movement, and battery over 1h/6h/24h/7d
+as separate single-metric line charts (never one combined dual-axis chart),
+with hover detail and a table-view fallback. A reading of `0` for HR/SpO2 is
+treated as "not currently being worn," not a real zero, and leaves a gap in
+the line rather than plotting a false zero.
 
 ### Does the base need the internet at all?
 
