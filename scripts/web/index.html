@@ -178,21 +178,33 @@
   </div>
 
   <div class="card settings-card loading" id="card-alerts">
-    <h2>Heart rate / SpO2 alert thresholds</h2>
-    <div class="row"><label>HR warning (low/high)</label>
-      <input type="number" id="hr_warning_down" value="80"><input type="number" id="hr_warning_up" value="230"></div>
-    <div class="row"><label>HR danger (low/high)</label>
-      <input type="number" id="hr_dangerous_down" value="100"><input type="number" id="hr_dangerous_up" value="250"></div>
-    <div class="row"><label>SpO2 warning / danger (low)</label>
-      <input type="number" id="o2_warning_down" value="80"><input type="number" id="o2_dangerous_down" value="90"></div>
-    <div class="checkbox-row"><input type="checkbox" id="hr_advance_enable" checked>
-      <label style="min-width:auto;">HR alerts enabled</label></div>
-    <div class="checkbox-row"><input type="checkbox" id="oxy_advance_enable" checked>
-      <label style="min-width:auto;">SpO2 alerts enabled</label></div>
+    <h2>Heart rate alert</h2>
+    <div class="sub" style="margin:-4px 0 12px;">The only one of these fields confirmed to match a real app control —
+      the app exposes one "Heart rate alert" setting with a 40-100 low / 120-250 high range, matching this pair.</div>
+    <div class="row"><label>Low / high (bpm)</label>
+      <input type="number" id="hr_warning_down" value="80" min="40" max="100">
+      <input type="number" id="hr_warning_up" value="230" min="120" max="250"></div>
     <div class="row" style="margin-top:10px;">
       <button onclick="setAlerts()">Apply</button>
     </div>
     <div id="alerts-status" class="status"></div>
+
+    <details style="margin-top:14px;">
+      <summary style="cursor:pointer; color:var(--muted); font-size:0.82rem;">Other fields in this command (unconfirmed — not seen in the app's own UI)</summary>
+      <div class="sub" style="margin:8px 0;">`cmd 3519` carries these alongside the HR alert above in every real write
+        this project has captured, but no app screen exposes them directly. Current theory: they're fixed values the
+        app always sends, not independent settings — unconfirmed either way. Edit at your own judgement; verifying
+        this needs a fresh capture of the app's HR alert control at several different values to see whether any of
+        these move too (see README's "Project goals" for the exact test). Sent as-is alongside the HR alert on Apply.</div>
+      <div class="row"><label>HR danger (low/high)</label>
+        <input type="number" id="hr_dangerous_down" value="100"><input type="number" id="hr_dangerous_up" value="250"></div>
+      <div class="row"><label>SpO2 warning / danger (low)</label>
+        <input type="number" id="o2_warning_down" value="80"><input type="number" id="o2_dangerous_down" value="90"></div>
+      <div class="checkbox-row"><input type="checkbox" id="hr_advance_enable" checked>
+        <label style="min-width:auto;">HR alerts enabled</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="oxy_advance_enable" checked>
+        <label style="min-width:auto;">SpO2 alerts enabled</label></div>
+    </details>
   </div>
 
   <div class="card settings-card loading" id="card-mode">
