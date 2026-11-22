@@ -143,8 +143,6 @@
       <input type="range" id="brightness" min="1" max="11" value="5">
       <input type="number" id="brightness-num" min="1" max="11" value="5">
     </div>
-    <div class="sub" style="margin:-4px 0 10px;">0 is not a valid value here &mdash; the base's firmware silently
-      remaps it to a built-in default instead of treating it as "off" (confirmed by testing).</div>
     <div class="checkbox-row">
       <input type="checkbox" id="brightness-auto">
       <label for="brightness-auto" style="min-width:auto;">Auto brightness</label>
@@ -157,8 +155,6 @@
 
   <div class="card settings-card loading" id="card-alerts">
     <h2>Heart rate alert</h2>
-    <div class="sub" style="margin:-4px 0 12px;">The only one of these fields confirmed to match a real app control —
-      the app exposes one "Heart rate alert" setting with a 40-100 low / 120-250 high range, matching this pair.</div>
     <div class="row"><label>Low / high (bpm)</label>
       <select id="hr_warning_down">
         <option value="40">40</option><option value="50">50</option><option value="60">60</option>
@@ -195,8 +191,9 @@
   </div>
 
   <div class="card settings-card loading" id="card-movement">
-    <h2>Other settings (unconfirmed)</h2>
-    <div class="sub" style="margin:-4px 0 12px;">Grouped here because it's not known whether any of these actually do
+    <details>
+      <summary style="cursor:pointer;"><h2 style="display:inline;">Other settings (unconfirmed)</h2></summary>
+    <div class="sub" style="margin:8px 0 12px;">Grouped here because it's not known whether any of these actually do
       anything — none of them are exposed by the official app's own UI, unlike every setting above.</div>
 
     <h3 style="font-size:0.85rem; margin:0 0 8px;">Movement alert threshold</h3>
@@ -222,6 +219,7 @@
       <label style="min-width:auto;">HR alerts enabled</label></div>
     <div class="checkbox-row"><input type="checkbox" id="oxy_advance_enable" checked>
       <label style="min-width:auto;">SpO2 alerts enabled</label></div>
+    </details>
   </div>
 
 <script>
