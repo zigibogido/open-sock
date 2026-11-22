@@ -19,6 +19,8 @@
     margin: 0; background: var(--bg); color: var(--text);
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     padding: 16px; max-width: 720px; margin-inline: auto;
+    color-scheme: dark; /* hints the browser to theme native widgets (incl. the
+      select's own dropdown popup, which CSS alone can't fully restyle) dark */
   }
   h1 { font-size: 1.3rem; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
@@ -29,10 +31,11 @@
   .card h2 { font-size: 1rem; margin: 0 0 10px; }
   .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
   label { font-size: 0.85rem; color: var(--muted); min-width: 140px; }
-  input[type=number], input[type=text] {
+  input[type=number], input[type=text], select {
     background: #0c0e12; border: 1px solid var(--border); color: var(--text);
     border-radius: 6px; padding: 6px 8px; width: 110px; font-size: 0.95rem;
   }
+  select { cursor: pointer; }
   input[type=range] { flex: 1; min-width: 120px; }
   button {
     background: var(--accent); color: white; border: none; border-radius: 6px;
@@ -182,8 +185,19 @@
     <div class="sub" style="margin:-4px 0 12px;">The only one of these fields confirmed to match a real app control —
       the app exposes one "Heart rate alert" setting with a 40-100 low / 120-250 high range, matching this pair.</div>
     <div class="row"><label>Low / high (bpm)</label>
-      <input type="number" id="hr_warning_down" value="80" min="40" max="100">
-      <input type="number" id="hr_warning_up" value="230" min="120" max="250"></div>
+      <select id="hr_warning_down">
+        <option value="40">40</option><option value="50">50</option><option value="60">60</option>
+        <option value="70">70</option><option value="80">80</option><option value="90">90</option>
+        <option value="100">100</option>
+      </select>
+      <select id="hr_warning_up">
+        <option value="120">120</option><option value="130">130</option><option value="140">140</option>
+        <option value="150">150</option><option value="160">160</option><option value="170">170</option>
+        <option value="180">180</option><option value="190">190</option><option value="200">200</option>
+        <option value="210">210</option><option value="220">220</option><option value="230">230</option>
+        <option value="240">240</option><option value="250">250</option>
+      </select>
+    </div>
     <div class="row" style="margin-top:10px;">
       <button onclick="setAlerts()">Apply</button>
     </div>
@@ -339,6 +353,20 @@ async function setMode() {
   } catch (e) { setStatus('mode-status', e.message, false); }
 }
 
+function setSelectValue(selectId, value) {
+  const el = document.getElementById(selectId);
+  const strValue = String(value);
+  if (![...el.options].some(o => o.value === strValue)) {
+    // The real device value doesn't land on one of the step-10 options --
+    // show it anyway rather than silently falling back to a different one.
+    const opt = document.createElement('option');
+    opt.value = strValue;
+    opt.textContent = `${strValue} (not a step-10 value)`;
+    el.appendChild(opt);
+  }
+  el.value = strValue;
+}
+
 function paramValue(params, type) {
   const p = params.find(x => x.param_type === type);
   return p ? p.param_value : null;
@@ -378,17 +406,20 @@ async function loadCurrentSettings() {
       markFailed('card-movement');
     }
 
-    // param_type 3519 is a packed string: hr_warning_up-hr_dangerous_up-hr_warning_down-
+    // param_type 3519 is a packed string: hr_dangerous_up-hr_warning_up-hr_warning_down-
     // hr_dangerous_down,o2_warning_down-o2_dangerous_down,hr_advance_enable-oxy_advance_enable
+    // (corrected 2026-11-22: the first two positions are swapped from what was
+    // originally documented -- confirmed by isolating each field with a distinct
+    // test value and diffing the readback; see docs/protocol-findings.md)
     const packed = paramValue(params, 3519);
     if (packed) {
       const [hrPart, o2Part, flagsPart] = packed.split(',');
-      const [hrWarnUp, hrDangerUp, hrWarnDown, hrDangerDown] = hrPart.split('-').map(Number);
+      const [hrDangerUp, hrWarnUp, hrWarnDown, hrDangerDown] = hrPart.split('-').map(Number);
       const [o2WarnDown, o2DangerDown] = o2Part.split('-').map(Number);
       const [hrEnable, oxyEnable] = flagsPart.split('-').map(Number);
-      document.getElementById('hr_warning_up').value = hrWarnUp;
+      setSelectValue('hr_warning_up', hrWarnUp);
       document.getElementById('hr_dangerous_up').value = hrDangerUp;
-      document.getElementById('hr_warning_down').value = hrWarnDown;
+      setSelectValue('hr_warning_down', hrWarnDown);
       document.getElementById('hr_dangerous_down').value = hrDangerDown;
       document.getElementById('o2_warning_down').value = o2WarnDown;
       document.getElementById('o2_dangerous_down').value = o2DangerDown;
