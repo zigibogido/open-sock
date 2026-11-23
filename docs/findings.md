@@ -27,8 +27,8 @@
 - The device's Eufy account region is **New Zealand** (confirmed by the user) — use this when the region picker appears, don't guess.
 - **Credentials and tokens — paths only, values are intentionally not in this file** (this file is committed and pushed to GitHub; never paste secrets into it):
   - Eufy account email/password: `work/secrets/eufy_creds.txt` (local only, gitignored, `chmod 600`).
-  - GitHub personal access token (pushes to this repo): `work/secrets/github_token.txt` (same — local only, gitignored).
-  - This repo: `zigibogido/open-sock` on GitHub, working branch `claude/eufy-app-reverse-engineer-bridge-hju3bx`. Remote already configured in `.git/config` with the token embedded in the URL — `git push origin claude/eufy-app-reverse-engineer-bridge-hju3bx` just works from this machine; no need to re-enter the token.
+  - GitHub: the old personal access token has been revoked. Pushes go to Forgejo, and GitHub is a push mirror only.
+  - This repo: hosted on Forgejo (source of truth) and mirrored to GitHub (`zigibogido/open-sock`). Working branch `claude/eufy-app-reverse-engineer-bridge-hju3bx`. No credentials are stored in the repo or in the remote URL.
   - Android device: USB serial `41bdf203` ("Mi 9T"), rooted via Magisk.
 
 # Manifest findings: com.oceanwing.care.cam.apk (sha256 c9598e80…bed1)
