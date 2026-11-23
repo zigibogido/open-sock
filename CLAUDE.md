@@ -15,3 +15,10 @@
 - Write findings to `docs/findings.md` as short bullets (UUIDs, endpoints,
   command formats) so later sessions don't re-derive them.
 - Ask before downloading large files or running anything long.
+
+## Secrets
+- Real values live outside the repo in ~/.config/open-sock/ (mode 700). Never write values into tracked files, docs or commit messages. work/ is gitignored and must never be committed.
+- env: holds EUFY_AES_KEY and EUFY_ACCOUNT_ID. Load for one command in Bash with: env $(cat ~/.config/open-sock/env) python3 scripts/<script>.py. In Fish: env (cat ~/.config/open-sock/env) python3 scripts/<script>.py
+- eufy_creds.txt: Eufy account login, used only by the Frida login scripts under work/. The server does not need it.
+- git-credentials: Forgejo token, read by git itself through the credential helper. The GitHub and Codeberg mirrors are push mirrors configured in Forgejo, so no token for them is needed locally.
+- Do not bypass the pre-commit hook with --no-verify.
