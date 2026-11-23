@@ -29,7 +29,7 @@ KEY = _env("EUFY_AES_KEY").encode()
 if len(KEY) != 16:
     raise SystemExit("EUFY_AES_KEY must be exactly 16 characters")
 BROADCAST_PORT = 32108
-BASE_IP = '10.10.10.10'  # Deepnest's DHCP reservation for the base's MAC
+BASE_IP = _os.environ.get('EUFY_BASE_IP', '10.10.10.10')
 ACCOUNT_ID = _env("EUFY_ACCOUNT_ID")
 
 # 12-byte "subtype" placed right after the XZYH tag -- specific to each cmd,
@@ -128,7 +128,7 @@ class EufyBaseSession:
 
     def connect(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(('', 0))
+        s.bind(('', int(_os.environ.get('EUFY_LOCAL_PORT', '32109'))))
         self.sock = s
 
         discovery_pkt = bytes.fromhex('f1300000')

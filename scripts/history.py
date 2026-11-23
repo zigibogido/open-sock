@@ -6,6 +6,7 @@ Kept deliberately simple (stdlib sqlite3, one table, no migrations) since
 this is a single-user personal tool, not a product with a schema that
 needs to evolve under load.
 """
+import os
 import sqlite3
 import sys
 import threading
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import eufy_client
 
-DB_PATH = Path(__file__).parent / 'eufy_history.sqlite3'
+DB_PATH = Path(os.environ.get('EUFY_DB_PATH', Path(__file__).parent / 'eufy_history.sqlite3'))
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS samples (

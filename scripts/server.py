@@ -182,8 +182,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--host', default='127.0.0.1')
-    ap.add_argument('--port', type=int, default=8420)
+    ap.add_argument('--host', default=os.environ.get('EUFY_BIND_HOST', '127.0.0.1'))
+    ap.add_argument('--port', type=int, default=int(os.environ.get('EUFY_PORT', '8420')))
     args = ap.parse_args()
 
     if not API_TOKEN:

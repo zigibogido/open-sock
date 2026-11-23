@@ -1,0 +1,10 @@
+work/
+.git/
+**/__pycache__/
+*.sqlite3*
+*.pcap*
+*.xapk
+.env
+.env.*
+!.env.example
+docs/

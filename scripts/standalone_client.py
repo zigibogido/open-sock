@@ -36,7 +36,7 @@ if len(KEY) != 16:
 BROADCAST_PORT = 32108
 LOCAL_SUBNET_BROADCAST = '10.10.10.255'
 GLOBAL_BROADCAST = '255.255.255.255'
-BASE_IP = '10.10.10.10'  # Deepnest's DHCP reservation for the base's MAC
+BASE_IP = _os.environ.get('EUFY_BASE_IP', '10.10.10.10')
 
 
 ACCOUNT_ID = _env("EUFY_ACCOUNT_ID")
@@ -99,7 +99,7 @@ def build_command_packet(cmd_obj: dict, msgid: int) -> bytes:
 
 def main():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind(('', 0))
+    s.bind(('', int(_os.environ.get('EUFY_LOCAL_PORT', '32109'))))
     local_port = s.getsockname()[1]
     print(f'[*] bound local port {local_port}')
 
