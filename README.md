@@ -223,6 +223,44 @@ block it at your router if you want to; just don't assume that's been
 stress-tested over days, only minutes, and note OTA updates and the
 cloud-only settings above would stop working too.
 
+## Running in Docker
+
+A prebuilt image is published to `ghcr.io/zigibogido/open-sock` whenever a version tag is pushed. Minimal `docker-compose.yml`:
+
+```yaml
+services:
+  open-sock:
+    image: ghcr.io/zigibogido/open-sock:0.1.0
+    container_name: open-sock
+    network_mode: host
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - open-sock-data:/data
+
+volumes:
+  open-sock-data:
+```
+
+Copy `.env.example` to `.env` and fill it in, or build the image yourself with `docker build -t open-sock .`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `EUFY_AES_KEY` | required | 16-character device key |
+| `EUFY_ACCOUNT_ID` | required | account ID used in command packets |
+| `EUFY_BASE_IP` | `10.10.10.10` | IP address of the base on your network |
+| `EUFY_BIND_HOST` | `127.0.0.1` | address the web UI and API listen on |
+| `EUFY_PORT` | `8420` | port for the web UI and API |
+| `EUFY_LOCAL_PORT` | `32109` | fixed local UDP port for the base protocol |
+| `EUFY_HISTORY_INTERVAL` | `90` | seconds between history samples |
+| `EUFY_API_TOKEN` | empty | optional bearer token for the API |
+
+The key and account ID belong to your own base and app account and are not part of this repository. `docs/findings.md` describes how they were found on one device.
+
+Use host networking. The base replies from a different UDP source port than the one the client sends to, so a stateful firewall drops the replies unless it allows UDP from the base to `EUFY_LOCAL_PORT`.
+
+The server listens on localhost by default and has no authentication unless `EUFY_API_TOKEN` is set. Put it behind an authenticating reverse proxy instead of exposing it directly.
+
 ## Repo layout
 
 - `docs/protocol-findings.md` — the detailed, narrative reverse-engineering
