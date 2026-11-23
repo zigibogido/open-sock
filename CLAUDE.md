@@ -22,3 +22,4 @@
 - eufy_creds.txt: Eufy account login, used only by the Frida login scripts under work/. The server does not need it.
 - git-credentials: Forgejo token, read by git itself through the credential helper. The GitHub and Codeberg mirrors are push mirrors configured in Forgejo, so no token for them is needed locally.
 - Do not bypass the pre-commit hook with --no-verify.
+- Refer to credentials, emails, MAC addresses and serials by file path only, never by literal value, in docs, commit messages and descriptions of screenshots. When a live device or account was involved in a session, re-read every diff for @, gmail or MAC-like strings before committing.
