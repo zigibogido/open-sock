@@ -1,6 +1,6 @@
 services:
   open-sock:
-    build: .
+    image: ghcr.io/zigibogido/open-sock:0.1.0
     container_name: open-sock
     network_mode: host
     restart: unless-stopped
