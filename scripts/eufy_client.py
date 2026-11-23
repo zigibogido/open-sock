@@ -15,10 +15,22 @@ import time
 
 import pure_aes
 
-KEY = b'REDACTED-AES-KEY'
+import os as _os
+
+
+def _env(name):
+    value = _os.environ.get(name)
+    if not value:
+        raise SystemExit(f"{name} is not set. Copy .env.example to .env, fill it in and export it.")
+    return value
+
+
+KEY = _env("EUFY_AES_KEY").encode()
+if len(KEY) != 16:
+    raise SystemExit("EUFY_AES_KEY must be exactly 16 characters")
 BROADCAST_PORT = 32108
 BASE_IP = '10.10.10.10'  # Deepnest's DHCP reservation for the base's MAC
-ACCOUNT_ID = 'REDACTED-ACCOUNT-ID'
+ACCOUNT_ID = _env("EUFY_ACCOUNT_ID")
 
 # 12-byte "subtype" placed right after the XZYH tag -- specific to each cmd,
 # extracted from real captured packets. See docs/protocol-findings.md's
