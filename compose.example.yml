@@ -1,0 +1,14 @@
+services:
+  open-sock:
+    build: .
+    container_name: open-sock
+    network_mode: host
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - open-sock-data:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=false
+
+volumes:
+  open-sock-data:
