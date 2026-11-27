@@ -1417,3 +1417,8 @@ Per the user's explicit request to try the `system_server` approach next (after 
 - History sample fields: hr, oxy, move, move_val, wear, battery_vol, rssi, ts. First sample had hr/oxy/move 0, wear 1.
 - No live writes done.
 - Docker is not installed in the sandbox, so the plain docker build and image test were not run. Do them on the host.
+
+## Telemetry window test, 2026-11-27
+- A 60s collect() saw cmd 3503 three times (about one per 20s), 77 params entries, and ~600 other JSON objects. The 6s default in read_telemetry() is too short and explains the 502.
+- 3503 payload fields: battery_vol, charge, cur_sleep_duration, cur_sleep_end, cur_sleep_start, hr, move, move_val, oxy, rssi, signal_quality, sn, time, wear, wear_threshold, wear_val.
+- Suggested fix: raise the read_telemetry default to ~25s (not yet applied).
