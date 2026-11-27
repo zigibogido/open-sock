@@ -1394,3 +1394,17 @@ Per the user's explicit request to try the `system_server` approach next (after 
 **Operational note for next time**: `system_server` is extremely long-lived (it did not restart once across this entire multi-hour session), so every `Interceptor.replace`/`attach` from every driver script accumulates and **persists until that specific session detaches cleanly** — killing a driver with `SIGKILL` (as happened once earlier tonight) leaves its hooks permanently active and causes `"Error: already replaced this function"` on the next attach attempt. Always stop these drivers with `SIGINT` (letting Frida's session-detach cleanup run) and confirm `SESSION DETACHED, reason=application-requested` in the log before starting a new one against the same target function.
 
 **Where this leaves it**: both pivots requested tonight were executed as designed, both produced real, verifiable technical results (a safely-rejected stale signature; a confirmed-working skip that didn't fully solve it), and both surfaced the same underlying truth — this mechanism is deliberately redundant. Continuing would mean widening the hunt to other system processes/kernel-level mechanisms for the secondary kill path, which is a further, open-ended escalation rather than a bounded next step.
+
+## Handoff: open-sock session of 2026-11-27
+
+- State: commit df4d9bf (alarm stop 3527, prompt bitmask helpers, /api/settings/prompts, /api/alarm/stop, /api/volume, movement route keeps tones_pushes, validating read_params, largest-dump collect) is pushed to Forgejo on branch claude/eufy-app-reverse-engineer-bridge-hju3bx. No tag or release made.
+- Only offline stub checks done. Nothing from this commit has run against the real base yet.
+- First live test failed: all reads returned 502 "no announce (f1 41) ... base unreachable", history had 0 samples. Cause: the sandbox was on the Docker bridge (172.17.0.x, gateway 172.17.0.1), not the 192.168.7.x LAN. Not a code defect.
+- Sandbox has no ping or ss; probe with a Python UDP socket (connect to base:32108, read getsockname) to see which local IP is used.
+- Base LAN address for testing is set via EUFY_BASE_IP (value in the session brief, not here).
+- Decision: EUFY_LOCAL_PORT default is 0 for now. The VM firewall is pinned to 32109, so compose.example.yml / .env.example must set it explicitly before a release.
+- Decision: no live writes (set_prompt, stop_alarm) until the base reports a real alert. Parked ideas stay parked.
+- Next: (1) read-only LAN test from source (telemetry, params, volume, history; report success/fail and field names only); (2) plain docker build (no buildx) and repeat; (3) ask before tagging v0.1.1-rc1.
+- Still needed from the user: Stop-button capture (PCAPdroid, stop recording before tapping Stop) to learn what param 3527 and alarm_on:1 mean.
+- Not yet done: expose param 3527 and decoded prompt bits in /api/params or a status endpoint (waits on the capture).
+- Git push works via a repo-local credential helper pointing at work/secrets/git-credentials (local .git/config only, untracked).
