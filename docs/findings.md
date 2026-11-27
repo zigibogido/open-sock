@@ -1429,3 +1429,22 @@ Per the user's explicit request to try the `system_server` approach next (after 
 - sweep2 dump shows param 1235 = 26 (max); live read today is 1. Volume was changed some time after 2026-11-20 without our own local write, consistent with the cloud/app-only write path.
 - mitm_capture3.flow (578 KB) has no "volume" string; mitm_capture.flow and mitm_capture2.flow are empty.
 - Still unproven: that the write goes via the cloud. Needs a capture on the base side (router mirror) or the internet-block test.
+
+## Handoff: params session of 2026-11-27 (evening)
+
+- State: branch claude/eufy-app-reverse-engineer-bridge-hju3bx pushed through d4937ca. Tag v0.1.1-rc1 pushed earlier (release workflow triggered; run not checked). Nothing newer is tagged.
+- Network: sandbox reaches the base on its LAN with EUFY_LOCAL_PORT=0. Ports 0 and 32109 both worked 5/5 in the sandbox; the VM firewall case is untested. .env.example sets 32109; the code default is 0. Run commands from the repo root with `env $(cat work/secrets/env) EUFY_BASE_IP=<ip> python3 scripts/...` (Fish: `env (cat work/secrets/env) ...`). Keep commands short: long pasted lines wrap and break.
+- Fixed: read_telemetry default window 6s -> 25s (3503 arrives about every 20s).
+- Docker: not tested. The sandbox has no docker; the user's host build ran and started but the endpoint checks were never done. Parked.
+- Docs: docs/params.md is the 78-entry params table with confidence per row. docs/protocol-findings.md has the tones_pushes update. scripts/poll_volume.py is a read-only param watcher (--all-changes, --also IDs, --log).
+- Volume (param 1235): app change reached the base params within one 10s poll. Cloud vs local path still unresolved and parked by choice. Old sweep captures were base-IP filtered, so they cannot show cloud traffic.
+- 3516 has two groups: low bits (voice prompts, write verified) and upper bits (the app's "base notifications"). set_prompt now has push_hr 0x300, push_worn 0x400, push_battery 0x1000, push_sock 0x2000, mapped by toggle order only. The write is untested; no live writes until the base reports a real alert.
+- Open questions for the next session:
+  1. Confirm the push_* mapping and toggle direction: toggle each base notification alone with the poller running.
+  2. 3547 (20 -> 23 -> 55 -> 51 -> 35 after the mute toggle) and 3529 (20s pulse around the volume and brightness-auto changes): find the trigger.
+  3. Auto-brightness toggle changed nothing in 3515; look for another param.
+  4. Time and timezone changes: confirm they were made before the poll stopped; no param moved.
+  5. 63 of 78 params are still unknown; most are constant.
+- Pairing from scratch: needs BLE Wi-Fi credential transfer (crypto unknown, not the PPCS key) plus cloud registration (base needs real HTTPS to the vendor cloud before committing credentials). Recommended next test: pair on a normal network, then move the base to the isolated test network and check it still answers the LAN client. Not started; needs the user to pair a base.
+- Not needed now: the Stop-button capture (param 3527 meaning) was deferred by the user.
+- Housekeeping: the sock serial was redacted from findings.md in d474276 but remains in older commits already pushed. History rewrite not done, ask first.
