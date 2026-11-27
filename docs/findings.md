@@ -1422,3 +1422,10 @@ Per the user's explicit request to try the `system_server` approach next (after 
 - A 60s collect() saw cmd 3503 three times (about one per 20s), 77 params entries, and ~600 other JSON objects. The 6s default in read_telemetry() is too short and explains the 502.
 - 3503 payload fields: battery_vol, charge, cur_sleep_duration, cur_sleep_end, cur_sleep_start, hr, move, move_val, oxy, rssi, signal_quality, sn, time, wear, wear_threshold, wear_val.
 - Suggested fix: raise the read_telemetry default to ~25s (not yet applied).
+
+## Old-capture check for volume writes, 2026-11-27
+- work/magisk/settings_sweep.pcap and sweep2.pcap are base-IP-filtered: only phone<->base UDP (no cloud traffic), so they can show absence of a local write but cannot show the cloud path.
+- Decoded cmds: phone->base only 1201, 3509, 3516 (heartbeat), 3519, 3546; base->phone 3503, rssi_list, one bulk param dump per session (about 90-130s into each capture). No single-param update objects after the dump, so param 1235 never changed on the local channel during the sweeps.
+- sweep2 dump shows param 1235 = 26 (max); live read today is 1. Volume was changed some time after 2026-11-20 without our own local write, consistent with the cloud/app-only write path.
+- mitm_capture3.flow (578 KB) has no "volume" string; mitm_capture.flow and mitm_capture2.flow are empty.
+- Still unproven: that the write goes via the cloud. Needs a capture on the base side (router mirror) or the internet-block test.
