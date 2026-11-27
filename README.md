@@ -251,7 +251,7 @@ Copy `.env.example` to `.env` and fill it in, or build the image yourself with `
 | `EUFY_BASE_IP` | `10.10.10.10` | IP address of the base on your network |
 | `EUFY_BIND_HOST` | `127.0.0.1` | address the web UI and API listen on |
 | `EUFY_PORT` | `8420` | port for the web UI and API |
-| `EUFY_LOCAL_PORT` | `32109` | fixed local UDP port for the base protocol |
+| `EUFY_LOCAL_PORT` | `0` (random) | fixed local UDP port for the base protocol; `.env.example` sets `32109`, use it if a firewall pins the port |
 | `EUFY_HISTORY_INTERVAL` | `90` | seconds between history samples |
 | `EUFY_API_TOKEN` | empty | optional bearer token for the API |
 
