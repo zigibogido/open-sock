@@ -330,9 +330,15 @@ def write_setting(cmd: int, payload: dict, duration: float = 8.0) -> dict:
     }
 
 
-# cmd 3516 tones_pushes bitmask (set bit = prompt ON). Bits 0x1400 are always
-# set and must be preserved; other bits are unmapped.
-PROMPT_MASKS = {'hr': 0x03, 'worn': 0x04, 'battery': 0x10, 'sock': 0x20}
+# cmd 3516 tones_pushes bitmask (set bit = prompt ON). Two groups:
+# low bits = voice prompts (write verified); push_* = upper bits that moved
+# with the app's four "base notifications" toggles on 2026-11-27. The push_*
+# mapping is from toggle order only (medium confidence) and untested as a
+# write. Unmapped bits are preserved by the read-modify-write in set_prompt.
+PROMPT_MASKS = {
+    'hr': 0x03, 'worn': 0x04, 'battery': 0x10, 'sock': 0x20,
+    'push_hr': 0x300, 'push_sock': 0x2000, 'push_worn': 0x400, 'push_battery': 0x1000,
+}
 
 
 def _param_map(dump):
