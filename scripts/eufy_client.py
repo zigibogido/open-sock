@@ -282,7 +282,7 @@ class EufyBaseSession:
         return results
 
 
-def read_telemetry(duration: float = 6.0) -> dict:
+def read_telemetry(duration: float = 25.0) -> dict:
     with EufyBaseSession() as sess:
         res = sess.collect(duration=duration)
     if res['telemetry'] is None:
