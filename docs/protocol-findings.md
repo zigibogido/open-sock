@@ -258,3 +258,6 @@ authentication/encryption scheme, and not something this document covers.
 This only works against a base that already trusts your device's IP from
 normal pairing — it's not a remote exploit, it requires LAN access to a base
 you've already paired with the official app at least once.
+
+## Update 2026-11-27: tones_pushes upper bits
+The app's four "base notifications" toggles changed 3516 bits 0x300, 0x2000, 0x400 and 0x1000 (in toggle order: heart rate, disconnected, not worn, low battery, order-based mapping). The low bits in the table above did not move. The table's note that 0x1400 is always set is therefore wrong; two separate groups live in this param, probably the "tones" (low bits) and "pushes" (upper bits) of the field name. `set_prompt` only handles the low group. See docs/params.md.

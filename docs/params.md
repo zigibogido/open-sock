@@ -18,7 +18,7 @@ Low = guess from value range. Unknown = no evidence yet, most are constant, so o
 | 1135/255 | 4 | 4 | Unknown | - | constant in all snapshots |
 | 1137/255 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 1141/255 | -17 | - / -17 | Unknown | - | varies, no match found |
-| 1141/44 | -17 | -44 / -16 / -17 / -49 | Link signal strength (dBm-like) | Low | varies -16 to -49; no matching telemetry field |
+| 1141/44 | -17 | -16 to -49 | Link signal strength, noisy | Medium | flips between -16 and -18 every few polls with no setting changed |
 | 1147/255 | 1795762786 | changes every poll | Base clock, unix seconds | High | rises ~10 s per 10 s poll |
 | 1148/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 1149/44 | 0 | 0 | Unknown | - | constant in all snapshots |
@@ -44,11 +44,11 @@ Low = guess from value range. Unknown = no evidence yet, most are constant, so o
 | 1201/0 | 0 | 0 | Account/session record (cmd 1201: time_out, user_name) | Low | same id as cmd 1201; value 0 in dump |
 | 1224/255 | 1 | 1 | Unknown | - | constant in all snapshots |
 | 1225/44 | 9 | 9 | Unknown | - | constant in all snapshots |
-| 1235/255 | 1 | 16 / 26 / 19 / 15 | Speaker volume 1-26 | High | read verified; write path unknown (see findings) |
+| 1235/255 | 26 | 16 / 26 / 19 / 15 | Speaker volume 1-26 | High | app change 1 -> 26 reached the base within one 10 s poll on 2026-11-27 (path still unknown) |
 | 1239/44 | 9 | 9 | Unknown | - | constant in all snapshots |
 | 1257/255 | 63 | 63 | Unknown | - | constant in all snapshots |
 | 1265/255 | 2 | 2 | Unknown | - | constant in all snapshots |
-| 1266/255 | -36 | -36 / -37 / -33 / -40 | Base Wi-Fi RSSI (dBm) | Low | varies -33 to -40; plausible but not matched to a field |
+| 1266/255 | -35 | -31 to -40 | Base Wi-Fi RSSI, noisy | Medium | jitters -31 to -36 over a minute with no setting changed |
 | 1279/255 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 1280/255 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 1281/255 | 1 | 1 | Unknown | - | constant in all snapshots |
@@ -65,9 +65,9 @@ Low = guess from value range. Unknown = no evidence yet, most are constant, so o
 | 3512/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 3513/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 3514/44 | 0 | 0 / 98 | Unknown | - | varies, no match found |
-| 3515/255 | 11 | 8 / 11 / 9 | LED brightness 1-11 | High | write verified via cmd 3515 |
-| 3516/44 | 5123 | 8995 / 5140 / 5143 / 13312 | tones_pushes bitmask (voice prompts) | High | write verified via cmd 3516; see tones_pushes section |
-| 3519/44 | 250-250-40-40,90-9 | 230-230-100-80,9 / 250-250-100-80,9 / 220-220-80-80,90 / 220-210-90-80,90 | HR/SpO2 alert thresholds, packed string | High | write verified via cmd 3519; first two HR fields swapped vs older notes |
+| 3515/255 | 1 | 8 / 11 / 9 | LED brightness 1-11 | High | write verified; app change 11 -> 1 seen 2026-11-27. The two auto-brightness toggles produced no change here |
+| 3516/44 | 8963 | many | tones_pushes bitmask. Low bits 0x03/0x04/0x10/0x20 = voice prompts (documented). Upper bits 0x100+0x200, 0x400, 0x1000, 0x2000 = the app's "base notifications" (4 toggles, 2026-11-27 poll, mapped by toggle order, direction of each toggle unknown) | Medium | one change per toggle; low bits did not move |
+| 3519/44 | 250-240-100-40,90-90,1-1 | many | HR/SpO2 thresholds, packed string | High | app range 40-250 -> 100-240 changed fields 2 and 3 only: 250-250-40-40 -> 250-240-100-40 |
 | 3520/44 | 30 | 30 | Movement alert threshold | High | cur_map[3520] is move_threshold in eufy_client.py; constant 30 |
 | 3521/44 | 210 | 210 / 0 | Unknown | - | varies, no match found |
 | 3522/44 | 0 | 0 | Unknown | - | constant in all snapshots |
@@ -77,7 +77,7 @@ Low = guess from value range. Unknown = no evidence yet, most are constant, so o
 | 3526/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 3527/255 | 0 | 0 | Alarm stop state | Medium | cmd 3527 stop; effect on a live alert unproven |
 | 3528/255 | 0 | 0 | Unknown | - | constant in all snapshots |
-| 3529/255 | 0 | 0 / 1 | Unknown | - | varies, no match found |
+| 3529/255 | 0 | 0 / 1 | Unknown, transient flag | - | pulsed 1 for about 20 s right after the base volume change and brightness-auto toggles on 2026-11-27; also 1 in two old snapshots |
 | 3537/44 | 5 | 5 | Unknown | - | constant in all snapshots |
 | 3539/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 3540/44 | 0 | 0 | Unknown | - | constant in all snapshots |
@@ -85,10 +85,15 @@ Low = guess from value range. Unknown = no evidence yet, most are constant, so o
 | 3543/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 | 3545/44 | 3 | 3 | Unknown | - | constant in all snapshots |
 | 3546/255 | 0 | 0 | Working mode 0=Standard, 1=Mute | High | write verified via cmd 3546 |
-| 3547/44 | 20 | 20 | Unknown | - | constant in all snapshots |
+| 3547/44 | 35 | 20 (12 old snapshots) | Unknown, volatile | - | was 20 in every old snapshot; moved 20 -> 23 -> 55 -> 51 -> 35 between 20:33:43 and 20:34:45 on 2026-11-27, starting 21 s after the mute toggle, and stayed at 35 |
 | 3548/44 | 0 | 0 | Unknown | - | constant in all snapshots |
 
 ## How to resolve the Unknown rows
 - Run scripts/poll_volume.py --all-changes (read-only) while changing one app setting at a time; a changed id is that setting's param.
 - Most Unknown ids never changed in 12 snapshots, so they are probably features the app exposes rarely (sleep, child profile, firmware, hardware flags) or are reserved.
 - Candidates that did vary and still need a trigger: 3514/44 (98 once), 3521/44 (0 vs 210), 2111/44 (1 vs 2), 3541/44, 3529/255, 1141/44.
+
+## Settings poll, 2026-11-27 (poll_volume.py --all-changes, one app change at a time)
+- Moved a param: standard<->mute (3546, both ways), the 4 "base notifications" toggles (3516 upper bits, one change each), heart-rate range (3519), base volume (1235), brightness level (3515).
+- Did not move any param: sock name, base name, the 4 "app notifications" toggles, 12h/24h, timezone, and the two auto-brightness toggles. Name, time and timezone were presumably cloud/phone only; the app-notification toggles are phone-local or cloud. The poll ended at 20:39:31, so confirm the time and timezone changes had been made by then.
+- Noise to ignore: 1147 (clock), 1141 and 1266 (signal strength).
