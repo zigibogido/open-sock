@@ -120,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._run(lambda: eufy_client.read_telemetry(), cache_key='telemetry')
         if self.path == '/api/params':
             return self._run(lambda: eufy_client.read_params(), cache_key='params')
+        if self.path == '/api/volume':
+            return self._run(lambda: {'volume': eufy_client.read_volume(), 'min': 1, 'max': 26})
         if self.path == '/api/status':
             return self._send_json(200, {'ok': True, 'cache': _cache})
         if self.path.startswith('/api/history'):
@@ -143,11 +145,28 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 return self._run(lambda: eufy_client.write_setting(3515, payload))
             if self.path == '/api/settings/movement':
-                payload = {
-                    'move_threshold': int(body['move_threshold']),
-                    'tones_pushes': int(body.get('tones_pushes', 0)),
-                }
-                return self._run(lambda: eufy_client.write_setting(3516, payload))
+                thr = int(body['move_threshold'])
+                if 'tones_pushes' in body:
+                    tones = int(body['tones_pushes'])
+                    return self._run(lambda: eufy_client.write_setting(
+                        3516, {'move_threshold': thr, 'tones_pushes': tones}))
+
+                def _write_keep_prompts():
+                    # tones_pushes is the voice-prompt bitmask: preserve current value
+                    cur = int(eufy_client._param_map(eufy_client.read_params())[3516])
+                    return eufy_client.write_setting(
+                        3516, {'move_threshold': thr, 'tones_pushes': cur})
+                return self._run(_write_keep_prompts)
+            if self.path == '/api/settings/prompts':
+                name = body.get('prompt')
+                if name not in eufy_client.PROMPT_MASKS:
+                    return self._send_json(400, {'ok': False, 'error': f'prompt must be one of {sorted(eufy_client.PROMPT_MASKS)}'})
+                if not isinstance(body.get('on'), bool):
+                    return self._send_json(400, {'ok': False, 'error': 'on must be true or false'})
+                on = body['on']
+                return self._run(lambda: eufy_client.set_prompt(name, on))
+            if self.path == '/api/alarm/stop':
+                return self._run(lambda: eufy_client.stop_alarm())
             if self.path == '/api/settings/alerts':
                 required = [
                     'hr_advance_enable', 'hr_dangerous_down', 'hr_dangerous_up',

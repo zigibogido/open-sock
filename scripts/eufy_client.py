@@ -34,15 +34,13 @@ ACCOUNT_ID = _env("EUFY_ACCOUNT_ID")
 
 # 12-byte "subtype" placed right after the XZYH tag -- specific to each cmd,
 # extracted from real captured packets. See docs/protocol-findings.md's
-# "Command catalog". cmd 3546 (working mode) is NOT here yet: its mapping is
-# confirmed but no real write packet has been captured to pull a subtype
-# from, so writing it would mean guessing a 12-byte value the base will
-# likely silently drop (or worse, misapply) -- deliberately left
-# unimplemented until that capture is done.
+# "Command catalog". Bytes 2-3 are the ciphertext length (little-endian), so
+# commands with the same padded length share a subtype (inferred).
 COMMAND_SUBTYPES = {
     3515: bytes.fromhex('460590000000010000010000'),  # brightness
     3516: bytes.fromhex('4605a000000001002c010000'),  # move_threshold / tones_pushes
     3519: bytes.fromhex('46057001000001002c010000'),  # HR/SpO2 alert thresholds
+    3527: bytes.fromhex('4605a000000001002c010000'),  # alarm stop
     3546: bytes.fromhex('46058000000001002c010000'),  # working mode (0=Standard, 1=Mute)
 }
 
@@ -128,7 +126,7 @@ class EufyBaseSession:
 
     def connect(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(('', int(_os.environ.get('EUFY_LOCAL_PORT', '32109'))))
+        s.bind(('', int(_os.environ.get('EUFY_LOCAL_PORT', '0'))))
         self.sock = s
 
         discovery_pkt = bytes.fromhex('f1300000')
@@ -276,7 +274,10 @@ class EufyBaseSession:
                     if isinstance(obj, dict) and obj.get('cmd') == 3503:
                         results['telemetry'] = obj.get('payload', obj)
                     elif isinstance(obj, dict) and 'params' in obj:
-                        results['params'] = obj
+                        # keep the largest dump: later repeats can be partial
+                        if (results['params'] is None
+                                or len(obj['params']) >= len(results['params']['params'])):
+                            results['params'] = obj
 
         return results
 
@@ -289,12 +290,28 @@ def read_telemetry(duration: float = 6.0) -> dict:
     return res['telemetry']
 
 
-def read_params(duration: float = 10.0) -> dict:
-    with EufyBaseSession() as sess:
-        res = sess.collect(duration=duration)
-    if res['params'] is None:
-        raise EufyBaseError('no params dump seen in the window -- try again')
-    return res['params']
+EXPECTED_PARAMS = 77
+
+
+def read_params(duration: float = 10.0, attempts: int = 4) -> dict:
+    """Read a full params dump; partial dumps are rejected and retried.
+    Retrying is safe: nothing is written."""
+    last = 'no params dump seen in the window'
+    for _ in range(attempts):
+        try:
+            with EufyBaseSession() as sess:
+                res = sess.collect(duration=duration)
+        except EufyBaseError as e:
+            last = str(e)
+            time.sleep(1)
+            continue
+        d = res['params']
+        if d and len(d['params']) >= EXPECTED_PARAMS \
+                and all('param_type' in p for p in d['params']):
+            return d
+        last = f"partial dump ({len(d['params']) if d else 0} params)"
+        time.sleep(1)
+    raise EufyBaseError(last)
 
 
 def write_setting(cmd: int, payload: dict, duration: float = 8.0) -> dict:
@@ -311,3 +328,40 @@ def write_setting(cmd: int, payload: dict, duration: float = 8.0) -> dict:
         'telemetry': res['telemetry'],
         'params': res['params']['params'] if res['params'] else None,
     }
+
+
+# cmd 3516 tones_pushes bitmask (set bit = prompt ON). Bits 0x1400 are always
+# set and must be preserved; other bits are unmapped.
+PROMPT_MASKS = {'hr': 0x03, 'worn': 0x04, 'battery': 0x10, 'sock': 0x20}
+
+
+def _param_map(dump):
+    return {int(p['param_type']): p['param_value'] for p in dump['params']}
+
+
+def set_prompt(name: str, on: bool) -> dict:
+    """Read-modify-write one voice prompt bit, then read back."""
+    mask = PROMPT_MASKS[name]
+    cur_map = _param_map(read_params())
+    cur, thr = int(cur_map[3516]), int(cur_map[3520])
+    new = (cur | mask) if on else (cur & ~mask)
+    if new != cur:
+        write_setting(3516, {'move_threshold': thr, 'tones_pushes': new})
+    after = int(_param_map(read_params())[3516])
+    return {'before': cur, 'written': new, 'after': after}
+
+
+def stop_alarm(duration: float = 8.0) -> dict:
+    """Send the alarm-stop write (cmd 3527). Effect on a live alert unproven."""
+    payload = {'alarm_on': 0, 'hr_alarm': 0, 'oxy_alarm': 0, 'stop': 1}
+    with EufyBaseSession() as sess:
+        res = sess.collect(duration=duration,
+                           write_cmd={'cmd': 3527, 'payload': payload})
+    pushes = [o['payload'] for o in res['all']
+              if isinstance(o, dict) and o.get('cmd') == 3527]
+    return {'sent': payload, 'pushes': pushes}
+
+
+def read_volume() -> int:
+    """Speaker volume (param 1235, 1-26). Read-only: no local write known."""
+    return int(_param_map(read_params())[1235])

@@ -171,19 +171,22 @@ All of these are `{"account_id","cmd","mChannel","mValue3","payload"}` JSON
 objects (in that exact key order for outgoing/write packets), AES-128-ECB
 encrypted, wrapped in the `f1 d0` framing above. Writes additionally need a
 **12-byte "subtype"** value placed right after the `XZYH` tag in the header —
-this is specific to each `cmd` number, not a shared constant; reusing one
-command's subtype for a different command gets the packet silently dropped
-(looks identical to "value rejected", but isn't — it's "packet shape not
-recognized"). Extract the correct subtype from a real captured packet for
-each new command before testing it; known-good values are in
+bytes 2-3 are the ciphertext length, little-endian (inferred, fits six data
+points), so commands with the same padded length share a subtype (3516 and
+3527 both pad to 160 bytes). Bytes 0-1 (`46 05`), and 4-11 are not understood.
+Safer for a new length: `subtype[2:4] = len(ciphertext).to_bytes(2, 'little')`
+(untested with a length change). A wrong subtype gets the packet silently
+dropped (looks like "value rejected", but is "packet shape not recognized").
+Extract the subtype from a real captured packet for each new command; known-good values are in
 `COMMAND_SUBTYPES` in `scripts/standalone_client.py`.
 
 | `cmd` | Direction | Status | Payload | Notes |
 |---|---|---|---|---|
 | 3503 | base→phone | read (periodic) | `sn, rssi, wear, wear_val, wear_threshold, hr, oxy, move, move_val, charge, battery_vol, signal_quality, cur_sleep_start/end/duration, time` | Live sock telemetry, the sock's own serial (`T8340...`) appears here for the first time — otherwise invisible to the phone. |
 | 3515 | phone→base | **write verified** | `brightness:1-11, brightness_auto:0\|1` | Base status LED. **`0` is not a valid value** — confirmed by repeated testing (4/4) that it's silently remapped by the base's firmware to a built-in default (`9`), not applied as "off" and not rejected outright either. The packet is still acked; only the readback reveals the remap. Use `1` for "lowest", not `0`. |
-| 3516 | phone→base | **write verified** | `move_threshold, tones_pushes` | Movement alert threshold; `tones_pushes` doubles as a periodic heartbeat/notification counter. Wire identity of the threshold value is actually `param_type 3520` in the bulk dump below — `param_type 3516` is `tones_pushes` instead; don't assume a command's JSON field name matches the closest-looking `param_type`. |
+| 3516 | phone→base | **write verified** | `move_threshold, tones_pushes` | Movement alert threshold; `tones_pushes` is a bitmask of voice prompt toggles, not a counter (see below). Always send both fields; read the current `tones_pushes` first. Wire identity of the threshold value is actually `param_type 3520` in the bulk dump below — `param_type 3516` is `tones_pushes` instead; don't assume a command's JSON field name matches the closest-looking `param_type`. |
 | 3519 | phone→base | **write verified** | `hr_advance_enable, hr_dangerous_down/up, hr_warning_down/up(+_real), o2_dangerous_down, o2_warning_down(+_real), oxy_advance_enable` | HR/SpO2 safety-alert thresholds. **Only `hr_warning_down/up` is confirmed to correspond to a real app control** (2026-11-22: the app's own UI turns out to expose exactly one "Heart rate alert" setting, range 40-100 low / 120-250 high — matches `hr_warning_down=100`/`hr_warning_up=250` from the one real sample on record, not `hr_dangerous_down=80`). The app has **no visible control at all** for `hr_dangerous_*`, either `o2_*` field, or either `*_enable` flag — current theory is the app always sends fixed values for these alongside the one real control, not that they're independently settable; unconfirmed. To settle it: capture the app's HR alert control at several different values and diff all 8 decoded fields — if only `hr_warning_down/up` ever change, that confirms the theory. **Correction (2026-11-22): the packed `param_type 3519` string's first two positions are `hr_dangerous_up-hr_warning_up-...`, not `hr_warning_up-hr_dangerous_up-...` as originally written below and in `docs/findings.md`'s original discovery entry** — confirmed by isolating each field with a distinct test value (e.g. `hr_warning_up=199`, `hr_dangerous_up=230` → packed string read back `230-199-...`) and diffing the readback across several writes, not by inference. The remaining positions (`hr_warning_down-hr_dangerous_down,o2_warning_down-o2_dangerous_down,hr_advance_enable-oxy_advance_enable`) are correct as documented. |
+| 3527 | phone→base | decoded, replayed; effect on a live alert unproven | `alarm_on:0, hr_alarm:0, oxy_alarm:0, stop:1` | Alarm stop. Subtype same as 3516. Base acks on ch0 (~250 ms) and pushes `{"cmd":3527,"payload":{sn,alarm_on,test,hr_alarm,oxy_alarm}}` on ch2 (~0.95 s, no account_id wrapper). Param 3527 reads 0 when idle; meaning unclear, `alarm_on:1` never observed. Needs a capture while the app shows the Stop button. |
 | 3546 | phone→base | **write verified** | `mode:0\|1` | Working Mode: `0`=Standard, `1`=Mute. Subtype `46058000000001002c010000`, extracted from a real captured `mode:1` write (PCAPdroid, unrooted phone, LAN). Both directions tested and confirmed via readback. |
 | 3509 | phone→base | read only | `bindStatus, birthdate, child_id, gender, height, name, race, weight` | Child/baby profile screen. Contains personal info by design, not a bug. |
 | 1201 | phone→base | read only, purpose unclear | `time_out, user_name` | Fires automatically, not tied to one specific UI action; may be account/session-related rather than a device setting. |
@@ -193,11 +196,34 @@ A separate, undecoded `rssi_list` message (no `cmd` wrapper) reports BLE
 signal strength between the base and sock in both directions and confirms
 both devices' serial numbers.
 
+### `tones_pushes` voice prompt bitmask (cmd 3516, param 3516)
+
+Set bit = prompt on. Current `move_threshold` is param 3520.
+
+| Mask | Prompt | Status |
+|---|---|---|
+| 0x03 | Heart rate out of range (bits 0 and 1 change together, reason unknown) | verified live, both directions |
+| 0x04 | Sock not worn correctly | verified live |
+| 0x10 | Sock low battery | verified live |
+| 0x20 | Sock disconnected | verified live |
+| 0x1400 | Always set, never changed; preserve | unknown |
+| 0x08, bits 6-9, 11 | Never changed | unknown |
+
+All off = 5120 (0x1400); all four on = 5175. Sending `tones_pushes: 0`
+turns every prompt off and clears the constant bits.
+
+Other findings: param 1235 is the base speaker volume (1-26), readable
+locally, no local write observed (probably BLE; treat as read-only). Writes
+may land even when the verifying read fails, so never retry a write without
+reading back first. The bulk dump is sometimes partial (about 5 in 40
+reads), so validate it has 77 entries and retry.
+
 ## Settings sweep: most toggles don't touch the local protocol at all
 
 A systematic sweep (toggling voice prompts, notifications, audio volume,
-device name, time format, timezone one at a time) produced **no new local
-UDP traffic** for any of them. A simultaneous unfiltered capture during a
+device name, time format, timezone one at a time) produced no new local
+UDP traffic for most of them (exception: four voice prompts, see the
+bitmask section above; other prompts and volume were not seen locally). A simultaneous unfiltered capture during a
 device-name change showed the actual traffic went over HTTPS to Eufy's cloud
 API instead. Conclusion: only settings that need to take effect on the
 physical device immediately and independent of connectivity (brightness,
