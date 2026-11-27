@@ -259,5 +259,13 @@ This only works against a base that already trusts your device's IP from
 normal pairing — it's not a remote exploit, it requires LAN access to a base
 you've already paired with the official app at least once.
 
-## Update 2026-11-27: tones_pushes upper bits
-The app's four "base notifications" toggles changed 3516 bits 0x300, 0x2000, 0x400 and 0x1000 (in toggle order: heart rate, disconnected, not worn, low battery, order-based mapping). The low bits in the table above did not move. The table's note that 0x1400 is always set is therefore wrong; two separate groups live in this param, probably the "tones" (low bits) and "pushes" (upper bits) of the field name. `set_prompt` only handles the low group. See docs/params.md.
+## Update 2026-11-27 (evening): tones_pushes upper-bit guess was wrong; low bits confirmed instead
+Earlier same-day entry above (toggle-order guess: 0x300/0x400/0x1000/0x2000) is disproven. Live test with a poller watching param 3516 while toggling each "base alert" setting in the app, one at a time, on then off (order: heart rate out of range, sock disconnected, sock not worn correctly, sock low battery):
+
+- Heart rate out of range off/on: 3516 xor 0x03 both times.
+- Sock disconnected on/off: xor 0x20 (isolated), confirmed via a merged poll window with the next toggle (net xor 0x24 = 0x20 ^ 0x04).
+- Sock not worn correctly on/off: xor 0x04.
+- Sock low battery on/off: xor 0x10.
+- The upper bits 0x300 and 0x2000 (set in the baseline dump) never moved across all 8 toggles.
+
+So the app's four base-alert toggles map onto the **same low bits already in `PROMPT_MASKS`** (hr=0x03, worn=0x04, battery=0x10, sock=0x20) — there is no separate "push" bit group for these four alerts. `set_prompt` now only exposes these four masks; `push_hr`/`push_worn`/`push_battery`/`push_sock` were removed from the code. What the 0x300/0x2000 upper bits (and the rest of the field) actually do is still unknown. See `work/base_alerts_poll.log` for the raw trace.
