@@ -1408,3 +1408,12 @@ Per the user's explicit request to try the `system_server` approach next (after 
 - Still needed from the user: Stop-button capture (PCAPdroid, stop recording before tapping Stop) to learn what param 3527 and alarm_on:1 mean.
 - Not yet done: expose param 3527 and decoded prompt bits in /api/params or a status endpoint (waits on the capture).
 - Git push works via a repo-local credential helper pointing at work/secrets/git-credentials (local .git/config only, untracked).
+
+## Live read-only test, 2026-11-27 (from source, EUFY_LOCAL_PORT=0)
+
+- Sandbox now routes to the base LAN (source IP is on a different subnet than the base; routing works). EUFY_LOCAL_PORT=0 works.
+- /api/params 200 (77 params), /api/volume 200 (volume/min/max = 1/1/26), /api/status 200, /api/history 200.
+- /api/telemetry 502 twice: "no telemetry (cmd 3503) seen in the window". Cause unknown; possibly 3503 is not pushed unless the device is measuring. Untested: longer window, worn/active device.
+- History sample fields: hr, oxy, move, move_val, wear, battery_vol, rssi, ts. First sample had hr/oxy/move 0, wear 1.
+- No live writes done.
+- Docker is not installed in the sandbox, so the plain docker build and image test were not run. Do them on the host.
